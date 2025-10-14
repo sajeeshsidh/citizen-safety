@@ -1,0 +1,254 @@
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import * as Location from 'expo-location';
+import { User, Alert } from '../types';
+import { acceptAlert, resolveAlert, updatePoliceLocation, deleteAlert } from '../backend';
+import AlertCard from './AlertCard';
+import PoliceHistoryCard from './PoliceHistoryCard';
+import PoliceAlertDetails from './PoliceAlertDetails';
+import FullScreenMapView from './FullScreenMapView';
+import SirenIcon from './icons/SirenIcon';
+import { useRouter } from 'expo-router';
+
+interface PoliceViewProps {
+    currentUser: User;
+    alerts: Alert[];
+    setAlerts: React.Dispatch<React.SetStateAction<Alert[]>>;
+    view: 'live' | 'history';
+}
+
+const PoliceView: React.FC<PoliceViewProps> = ({ currentUser, alerts, setAlerts, view }) => {
+    const router = useRouter();
+    const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [fullScreenMapAlert, setFullScreenMapAlert] = useState<Alert | null>(null);
+    const locationSubscription = useRef<Location.LocationSubscription | null>(null);
+
+    const myBadgeNumber = currentUser.mobile;
+
+    const { newAlerts, myActiveAlerts, historyAlerts } = useMemo(() => {
+        const newAlerts: Alert[] = [];
+        const myActiveAlerts: Alert[] = [];
+        const historyAlerts: Alert[] = [];
+
+        alerts.forEach(alert => {
+            if (alert.status === 'new' && alert.targetedOfficers?.includes(myBadgeNumber)) {
+                console.log('police: new alert');
+                newAlerts.push(alert);
+            } else if (alert.status === 'accepted' && alert.acceptedBy === myBadgeNumber) {
+                console.log('police: active alert');
+                myActiveAlerts.push(alert);
+            } else if (['resolved', 'canceled', 'timed_out'].includes(alert.status)) {
+                console.log('police: history alerts');
+                historyAlerts.push(alert);
+            }
+        });
+
+        historyAlerts.sort((a, b) => b.timestamp - a.timestamp);
+        return { newAlerts, myActiveAlerts, historyAlerts };
+    }, [alerts, myBadgeNumber]);
+
+    useEffect(() => {
+        const allVisibleAlerts = [...myActiveAlerts, ...newAlerts, ...historyAlerts];
+        const currentList = view === 'live' ? [...myActiveAlerts, ...newAlerts] : historyAlerts;
+
+        if (selectedAlert && !allVisibleAlerts.some(a => a.id === selectedAlert.id)) {
+            setSelectedAlert(currentList[0] || null);
+        } else if (!selectedAlert) {
+            setSelectedAlert(currentList[0] || null);
+        }
+    }, [alerts, view]);
+
+    useEffect(() => {
+        const startLocationTracking = async () => {
+            let { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                console.error("Location permission denied for police officer.");
+                return;
+            }
+
+            locationSubscription.current = await Location.watchPositionAsync(
+                {
+                    accuracy: Location.Accuracy.High,
+                    distanceInterval: 10, // Only update if moved more than 10 meters
+                },
+                (position) => {
+                    const newLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
+                    updatePoliceLocation(myBadgeNumber, newLocation).catch(err => console.error("Failed to update location:", err));
+                }
+            );
+        };
+
+        startLocationTracking();
+
+        return () => {
+            locationSubscription.current?.remove();
+        };
+    }, []);
+
+    const handleAcceptAlert = async (alertId: number) => {
+        setIsProcessing(true);
+        try {
+            const updatedAlert = await acceptAlert(alertId, myBadgeNumber);
+            setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, ...updatedAlert } : a));
+            setSelectedAlert(prev => prev && prev.id === alertId ? { ...prev, ...updatedAlert } : prev);
+        } catch (error) {
+            console.error("Failed to accept alert:", error);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleResolveAlert = async (alertId: number) => {
+        setIsProcessing(true);
+        try {
+            const updatedAlert = await resolveAlert(alertId);
+            setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, ...updatedAlert } : a));
+        } catch (error) {
+            console.error("Failed to resolve alert:", error);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleDeleteFromHistory = async (alertId: number) => {
+        try {
+            await deleteAlert(alertId);
+            setAlerts(prev => prev.filter(a => a.id !== alertId));
+        } catch (error) {
+            console.error("Failed to delete alert:", error);
+        }
+    };
+
+    const renderAlertList = (title: string, alertsToList: Alert[], CardComponent: any, emptyMessage: string, isHistory = false) => (
+        <View style={styles.listContainer}>
+            <Text style={styles.listTitle}>{title}</Text>
+            {alertsToList.length === 0 ? (
+                <Text style={styles.emptyText}>{emptyMessage}</Text>
+            ) : (
+                alertsToList.map(alert => {
+                    const isSelected = selectedAlert?.id === alert.id;
+                    return (
+                        <View key={alert.id} style={{ marginBottom: 8 }}>
+                            <CardComponent
+                                alert={alert}
+                                onClick={() => setSelectedAlert(current => (current?.id === alert.id ? null : alert))}
+                                isSelected={isSelected}
+                                onDelete={isHistory ? handleDeleteFromHistory : undefined}
+                                isActive={myActiveAlerts.some(a => a.id === alert.id)}
+                            />
+                            {isSelected && (
+                                <PoliceAlertDetails
+                                    alert={alert}
+                                    isMyActive={myActiveAlerts.some(a => a.id === alert.id)}
+                                    isProcessing={isProcessing}
+                                    onAccept={handleAcceptAlert}
+                                    onResolve={handleResolveAlert}
+                                    onMapClick={() => setFullScreenMapAlert(alert)}
+                                />
+                            )}
+                        </View>
+                    )
+                })
+            )}
+        </View>
+    );
+
+    return (
+        <View style={{ flex: 1 }}>
+            <ScrollView contentContainerStyle={styles.container}>
+                <View style={styles.header}>
+                    <SirenIcon width={32} height={32} color="#f43f5e" />
+                    <Text style={styles.title}>Dispatch Center</Text>
+                </View>
+
+                <View style={styles.toggleButtons}>
+                    <TouchableOpacity
+                        style={[styles.toggleButton, view === 'live' && styles.toggleButtonActive]}
+                        onPress={() => router.replace('/police')}
+                    >
+                        <Text style={[styles.toggleButtonText, view === 'live' && styles.toggleButtonTextActive]}>
+                            Live Alerts ({newAlerts.length + myActiveAlerts.length})
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.toggleButton, view === 'history' && styles.toggleButtonActive]}
+                        onPress={() => router.replace('/police?view=history')}
+                    >
+                        <Text style={[styles.toggleButtonText, view === 'history' && styles.toggleButtonTextActive]}>
+                            History ({historyAlerts.length})
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+
+                {view === 'live' ? (
+                    <View style={{ gap: 24 }}>
+                        {renderAlertList("My Active Response", myActiveAlerts, PoliceHistoryCard, "You have no active responses.")}
+                        {renderAlertList("New Incoming Alerts", newAlerts, AlertCard, "No new alerts.")}
+                    </View>
+                ) : (
+                    renderAlertList("Alert History", historyAlerts, PoliceHistoryCard, "History is empty.", true)
+                )}
+            </ScrollView>
+            {fullScreenMapAlert && (
+                <FullScreenMapView
+                    alert={fullScreenMapAlert}
+                    onClose={() => setFullScreenMapAlert(null)}
+                />
+            )}
+        </View>
+    );
+};
+
+const styles = StyleSheet.create({
+    container: {
+        padding: 16,
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    title: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: '#f1f5f9',
+        marginLeft: 12,
+    },
+    toggleButtons: {
+        flexDirection: 'row',
+        marginBottom: 16,
+        gap: 8,
+    },
+    toggleButton: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 8,
+        backgroundColor: '#1e293b',
+    },
+    toggleButtonActive: {
+        backgroundColor: '#dc2626',
+    },
+    toggleButtonText: {
+        color: '#cbd5e1',
+        fontWeight: 'bold',
+        textAlign: 'center',
+    },
+    toggleButtonTextActive: {
+        color: '#fff',
+    },
+    listContainer: {
+        // styles for the list sections
+    },
+    listTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#cbd5e1',
+        marginBottom: 8,
+    },
+    emptyText: {
+        color: '#64748b',
+    },
+});
+
+export default PoliceView;
