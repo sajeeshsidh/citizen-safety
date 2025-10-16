@@ -177,6 +177,7 @@ const CitizenView: React.FC<CitizenViewProps> = ({ currentUser, alerts, setAlert
                     citizenId: currentUser.mobile,
                     audioBase64: audioBase64,
                     location: { lat: location.latitude, lng: location.longitude },
+                    message: message,
                 });
 
                 setAlerts(prev => [newAlert, ...prev]);
