@@ -21,9 +21,10 @@ interface CitizenViewProps {
     alerts: Alert[];
     setAlerts: React.Dispatch<React.SetStateAction<Alert[]>>;
     view: 'send' | 'history' | 'active';
+    onAlertSent: () => void;
 }
 
-const CitizenView: React.FC<CitizenViewProps> = ({ currentUser, alerts, setAlerts, view }) => {
+const CitizenView: React.FC<CitizenViewProps> = ({ currentUser, alerts, setAlerts, view, onAlertSent }) => {
     const router = useRouter();
     const [message, setMessage] = useState('');
     const [isSending, setIsSending] = useState(false);
@@ -172,13 +173,14 @@ const CitizenView: React.FC<CitizenViewProps> = ({ currentUser, alerts, setAlert
                     encoding: 'base64',
                 });
 
-                await createAlert({
+                const newAlert = await createAlert({
                     citizenId: currentUser.mobile,
                     audioBase64: audioBase64,
                     location: { lat: location.latitude, lng: location.longitude },
                 });
 
-                router.replace('/citizen?view=active');
+                setAlerts(prev => [newAlert, ...prev]);
+                onAlertSent();
             }
         } catch (error) {
             console.error('Failed to stop recording or send alert', error);
@@ -203,12 +205,13 @@ const CitizenView: React.FC<CitizenViewProps> = ({ currentUser, alerts, setAlert
         }
         setIsSending(true);
         try {
-            await createAlert({
+            const newAlert = await createAlert({
                 citizenId: currentUser.mobile,
                 message,
                 location: { lat: location.latitude, lng: location.longitude }
             });
-            router.replace('/citizen?view=active');
+            setAlerts(prev => [newAlert, ...prev]);
+            onAlertSent();
         } catch (error) {
             console.error("Failed to send text alert:", error);
             RNAlert.alert("Error", "Failed to send text alert.");
@@ -247,7 +250,11 @@ const CitizenView: React.FC<CitizenViewProps> = ({ currentUser, alerts, setAlert
         }
     };
 
-    if (view === 'active' && activeAlert) {
+    if (view === 'active') {
+        if (!activeAlert) {
+            return null; // Should be brief, prevents rendering the wrong view while state updates.
+        }
+
         const liveAlert = alerts.find(a => a.id === activeAlert.id) || activeAlert;
         return (
             <ScrollView contentContainerStyle={styles.container}>

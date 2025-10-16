@@ -1,4 +1,4 @@
-import React, { useMemo, useEffect } from 'react';
+import React, { useMemo } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import CitizenView from '../components/CitizenView';
@@ -18,14 +18,9 @@ const CitizenPage = () => {
         );
     }, [alerts, currentUser]);
 
-    useEffect(() => {
-        // This effect makes the UI more robust. If the user is on the 'active' alert
-        // screen and the alert gets resolved/canceled (e.g., via WebSocket update),
-        // it redirects them back to the main screen to prevent a blank view.
-        if (viewParam === 'active' && !activeAlert) {
-            router.replace('/citizen');
-        }
-    }, [viewParam, activeAlert, router]);
+    const onAlertSent = () => {
+        router.replace('/citizen?view=active');
+    };
 
     if (!currentUser) return null; // Render nothing while redirecting
 
@@ -44,6 +39,7 @@ const CitizenPage = () => {
                     alerts={alerts}
                     setAlerts={setAlerts}
                     view={currentView}
+                    onAlertSent={onAlertSent}
                 />
             </View>
         </SafeAreaView>
