@@ -3,355 +3,355 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Animat
 import { User } from '../types';
 import UserIcon from './icons/UserIcon';
 import SirenIcon from './icons/SirenIcon';
-import { registerCitizen, loginCitizen, registerPolice, loginPolice } from '../backend';
+import { backendService } from '../services/BackendService';
 
 interface LoginViewProps {
-  onLogin: (user: User) => void;
+    onLogin: (user: User) => void;
 }
 
 const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
-  const [step, setStep] =useState<'role' | 'citizenLoginMethod' | 'mobileInput' | 'otpInput' | 'passwordLogin' | 'policeLogin'>('role');
-  const [mobileNumber, setMobileNumber] = useState('');
-  const [otp, setOtp] = useState('');
-  const [generatedOtp, setGeneratedOtp] = useState('');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSendingOtp, setIsSendingOtp] = useState(false);
-  const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
-  
-  const [policeAuthMode, setPoliceAuthMode] = useState<'login' | 'register'>('login');
-  const [policeName, setPoliceName] = useState('');
-  const [policeDesignation, setPoliceDesignation] = useState('');
-  const [policeBadgeNumber, setPoliceBadgeNumber] = useState('');
-  const [policePhoneNumber, setPolicePhoneNumber] = useState('');
+    const [step, setStep] = useState<'role' | 'citizenLoginMethod' | 'mobileInput' | 'otpInput' | 'passwordLogin' | 'policeLogin'>('role');
+    const [mobileNumber, setMobileNumber] = useState('');
+    const [otp, setOtp] = useState('');
+    const [generatedOtp, setGeneratedOtp] = useState('');
+    const [username, setUsername] = useState('');
+    const [password, setPassword] = useState('');
+    const [error, setError] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [isSendingOtp, setIsSendingOtp] = useState(false);
+    const [authMode, setAuthMode] = useState<'login' | 'register'>('login');
 
-  const toastAnim = useRef(new Animated.Value(-150)).current;
+    const [policeAuthMode, setPoliceAuthMode] = useState<'login' | 'register'>('login');
+    const [policeName, setPoliceName] = useState('');
+    const [policeDesignation, setPoliceDesignation] = useState('');
+    const [policeBadgeNumber, setPoliceBadgeNumber] = useState('');
+    const [policePhoneNumber, setPolicePhoneNumber] = useState('');
 
-  useEffect(() => {
-    // This effect can be used to trigger the animation
-  }, []);
+    const toastAnim = useRef(new Animated.Value(-150)).current;
 
-  const showOtpToast = () => {
-    Animated.sequence([
-      Animated.timing(toastAnim, {
-        toValue: 20,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-      Animated.delay(5000),
-      Animated.timing(toastAnim, {
-        toValue: -150,
-        duration: 300,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
+    useEffect(() => {
+        // This effect can be used to trigger the animation
+    }, []);
 
-  const handleGuestLogin = () => {
-    onLogin({ mobile: 'Guest User', role: 'citizen' });
-  };
+    const showOtpToast = () => {
+        Animated.sequence([
+            Animated.timing(toastAnim, {
+                toValue: 20,
+                duration: 300,
+                useNativeDriver: true,
+            }),
+            Animated.delay(5000),
+            Animated.timing(toastAnim, {
+                toValue: -150,
+                duration: 300,
+                useNativeDriver: true,
+            }),
+        ]).start();
+    };
 
-  // FIX: Removed event parameter from handler to match React Native's onPress signature.
-  const handleSendOtp = () => {
-    if (!/^\d{10}$/.test(mobileNumber)) {
-      setError('Please enter a valid 10-digit mobile number.');
-      return;
-    }
-    setError('');
-    setIsSendingOtp(true);
-    
-    setTimeout(() => {
-        const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
-        setGeneratedOtp(newOtp);
-        setIsSendingOtp(false);
-        setStep('otpInput');
-        showOtpToast();
-    }, 1500);
-  };
+    const handleGuestLogin = () => {
+        onLogin({ mobile: 'Guest User', role: 'citizen' });
+    };
 
-  // FIX: Removed event parameter from handler to match React Native's onPress signature.
-  const handleVerifyOtp = () => {
-    if (otp === generatedOtp) {
-      onLogin({ mobile: mobileNumber, role: 'citizen' });
-    } else {
-      setError('Invalid OTP. Please try again.');
-    }
-  };
+    // FIX: Removed event parameter from handler to match React Native's onPress signature.
+    const handleSendOtp = () => {
+        if (!/^\d{10}$/.test(mobileNumber)) {
+            setError('Please enter a valid 10-digit mobile number.');
+            return;
+        }
+        setError('');
+        setIsSendingOtp(true);
 
-  // FIX: Removed event parameter from handler to match React Native's onPress signature.
-  const handlePasswordLogin = async () => {
-    setError('');
-    if (!username || !password) {
-        setError('Please enter both username and password.');
-        return;
-    }
-    
-    setIsLoading(true);
-    try {
-        const user = await loginCitizen(username, password);
-        onLogin({ mobile: user.username, role: 'citizen' });
-    } catch (err) {
-        setError(err instanceof Error ? err.message : 'An unknown error occurred.');
-    } finally {
-        setIsLoading(false);
-    }
-  };
+        setTimeout(() => {
+            const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+            setGeneratedOtp(newOtp);
+            setIsSendingOtp(false);
+            setStep('otpInput');
+            showOtpToast();
+        }, 1500);
+    };
 
-  // FIX: Removed event parameter from handler to match React Native's onPress signature.
-  const handleRegister = async () => {
-    setError('');
-    if (!username || !password) {
-      setError('Please enter both username and password to register.');
-      return;
-    }
-    
-    setIsLoading(true);
-    try {
-        const newUser = await registerCitizen(username, password);
-        onLogin({ mobile: newUser.username, role: 'citizen' });
-    } catch (err) {
-        setError(err instanceof Error ? err.message : 'An unknown error occurred.');
-    } finally {
-        setIsLoading(false);
-    }
-  };
+    // FIX: Removed event parameter from handler to match React Native's onPress signature.
+    const handleVerifyOtp = () => {
+        if (otp === generatedOtp) {
+            onLogin({ mobile: mobileNumber, role: 'citizen' });
+        } else {
+            setError('Invalid OTP. Please try again.');
+        }
+    };
 
-  // FIX: Removed event parameter from handler to match React Native's onPress signature.
-  const handlePoliceRegister = async () => {
-    setError('');
-    if (!policeName || !policeDesignation || !policeBadgeNumber || !policePhoneNumber) {
-        setError('Please fill in all fields.');
-        return;
-    }
+    // FIX: Removed event parameter from handler to match React Native's onPress signature.
+    const handlePasswordLogin = async () => {
+        setError('');
+        if (!username || !password) {
+            setError('Please enter both username and password.');
+            return;
+        }
 
-    setIsLoading(true);
-    try {
-        const newOfficer = await registerPolice({
-            name: policeName,
-            designation: policeDesignation,
-            badgeNumber: policeBadgeNumber,
-            phoneNumber: policePhoneNumber,
-        });
-        onLogin({ mobile: newOfficer.badgeNumber, role: 'police' });
-    } catch (err) {
-        setError(err instanceof Error ? err.message : 'An unknown error occurred.');
-    } finally {
-        setIsLoading(false);
-    }
-  };
+        setIsLoading(true);
+        try {
+            const user = await backendService.loginCitizen(username, password);
+            onLogin({ mobile: user.username, role: 'citizen' });
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'An unknown error occurred.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
-  // FIX: Removed event parameter from handler to match React Native's onPress signature.
-  const handlePoliceBadgeLogin = async () => {
-    setError('');
-    if (!policeBadgeNumber) {
-        setError('Please enter your badge number.');
-        return;
-    }
+    // FIX: Removed event parameter from handler to match React Native's onPress signature.
+    const handleRegister = async () => {
+        setError('');
+        if (!username || !password) {
+            setError('Please enter both username and password to register.');
+            return;
+        }
 
-    setIsLoading(true);
-    try {
-        const officer = await loginPolice(policeBadgeNumber);
-        console.log('loginview: login police done. invoke login in provider');
-        onLogin({ mobile: officer.badgeNumber, role: 'police' });
-    } catch (err) {
-        setError(err instanceof Error ? err.message : 'An unknown error occurred.');
-    } finally {
-        setIsLoading(false);
-    }
-  };
+        setIsLoading(true);
+        try {
+            const newUser = await backendService.registerCitizen(username, password);
+            onLogin({ mobile: newUser.username, role: 'citizen' });
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'An unknown error occurred.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
-  const renderRoleSelection = () => (
-     <View style={styles.buttonGroup}>
-        <TouchableOpacity
-            style={[styles.roleButton, styles.citizenButton]}
-            onPress={() => setStep('citizenLoginMethod')}
-        >
-            <UserIcon width={64} height={64} color="#fff" />
-            <Text style={styles.roleButtonText}>I am a Citizen</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-            style={[styles.roleButton, styles.policeButton]}
-            onPress={() => { setStep('policeLogin'); setError(''); }}
-        >
-             <SirenIcon width={64} height={64} color="#e2e8f0" />
-             <Text style={[styles.roleButtonText, {color: '#e2e8f0'}]}>I am a Police Officer</Text>
-        </TouchableOpacity>
-    </View>
-  );
+    // FIX: Removed event parameter from handler to match React Native's onPress signature.
+    const handlePoliceRegister = async () => {
+        setError('');
+        if (!policeName || !policeDesignation || !policeBadgeNumber || !policePhoneNumber) {
+            setError('Please fill in all fields.');
+            return;
+        }
 
-  const renderCitizenLoginMethodSelection = () => (
-    <View>
-        <Text style={styles.titleSmall}>Citizen Login</Text>
+        setIsLoading(true);
+        try {
+            const newOfficer = await backendService.registerPolice({
+                name: policeName,
+                designation: policeDesignation,
+                badgeNumber: policeBadgeNumber,
+                phoneNumber: policePhoneNumber,
+            });
+            onLogin({ mobile: newOfficer.badgeNumber, role: 'police' });
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'An unknown error occurred.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // FIX: Removed event parameter from handler to match React Native's onPress signature.
+    const handlePoliceBadgeLogin = async () => {
+        setError('');
+        if (!policeBadgeNumber) {
+            setError('Please enter your badge number.');
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const officer = await backendService.loginPolice(policeBadgeNumber);
+            console.log('loginview: login police done. invoke login in provider');
+            onLogin({ mobile: officer.badgeNumber, role: 'police' });
+        } catch (err) {
+            setError(err instanceof Error ? err.message : 'An unknown error occurred.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const renderRoleSelection = () => (
         <View style={styles.buttonGroup}>
-            <TouchableOpacity style={styles.buttonPrimary} onPress={() => setStep('mobileInput')}>
-                <Text style={styles.buttonText}>Login with Mobile OTP</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.buttonSecondary} onPress={() => setStep('passwordLogin')}>
-                <Text style={styles.buttonTextSecondary}>Login with Username/Password</Text>
-            </TouchableOpacity>
-            <View style={styles.orDivider}>
-                <View style={styles.dividerLine} />
-                <Text style={styles.orText}>OR</Text>
-                <View style={styles.dividerLine} />
-            </View>
-            <TouchableOpacity style={styles.buttonTertiary} onPress={handleGuestLogin}>
-                <Text style={styles.buttonTextTertiary}>Continue as Guest</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => { setStep('role'); setError(''); }} style={styles.backButton}>
-                <Text style={styles.backButtonText}>Back to Role Selection</Text>
-            </TouchableOpacity>
-        </View>
-    </View>
-  );
-
-  const renderMobileInput = () => (
-    <View>
-        <Text style={styles.titleSmall}>Login with OTP</Text>
-        <View style={styles.buttonGroup}>
-            <TextInput
-                style={styles.input}
-                placeholder="10-digit mobile number"
-                placeholderTextColor="#64748b"
-                keyboardType="phone-pad"
-                value={mobileNumber}
-                onChangeText={setMobileNumber}
-                maxLength={10}
-                autoFocus
-            />
-             <TouchableOpacity
-                style={[styles.buttonPrimary, isSendingOtp && styles.buttonDisabled]}
-                onPress={handleSendOtp}
-                disabled={isSendingOtp}
-            >
-                {isSendingOtp ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Send OTP</Text>}
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => { setStep('citizenLoginMethod'); setError(''); }} style={styles.backButton}>
-                <Text style={styles.backButtonText}>Back</Text>
-            </TouchableOpacity>
-        </View>
-        {error && <Text style={styles.errorText}>{error}</Text>}
-    </View>
-  );
-
-  const renderOtpInput = () => (
-    <View>
-        <Text style={styles.titleSmall}>Verify OTP</Text>
-        <Text style={styles.subtitle}>Enter the 6-digit code sent to {mobileNumber}.</Text>
-        <View style={styles.buttonGroup}>
-            <TextInput
-                style={[styles.input, { letterSpacing: 8 }]}
-                placeholder="6-digit OTP"
-                placeholderTextColor="#64748b"
-                keyboardType="number-pad"
-                value={otp}
-                onChangeText={setOtp}
-                maxLength={6}
-                autoFocus
-            />
-            <TouchableOpacity style={styles.buttonPrimary} onPress={handleVerifyOtp}>
-                <Text style={styles.buttonText}>Verify & Login</Text>
-            </TouchableOpacity>
-            <TouchableOpacity onPress={() => { setStep('mobileInput'); setError(''); }} style={styles.backButton}>
-                <Text style={styles.backButtonText}>Back to Mobile Entry</Text>
-            </TouchableOpacity>
-        </View>
-        {error && <Text style={styles.errorText}>{error}</Text>}
-    </View>
-  );
-  
-  const renderPasswordLogin = () => (
-    <View>
-        <Text style={styles.titleSmall}>{authMode === 'login' ? 'Login with Password' : 'Register Account'}</Text>
-        <View style={styles.buttonGroup}>
-             <TextInput style={styles.input} placeholder="Username" placeholderTextColor="#64748b" value={username} onChangeText={setUsername} autoCapitalize="none" />
-            <TextInput style={styles.input} placeholder="Password" placeholderTextColor="#64748b" value={password} onChangeText={setPassword} secureTextEntry />
-             <TouchableOpacity
-                style={[styles.buttonPrimary, isLoading && styles.buttonDisabled]}
-                onPress={authMode === 'login' ? handlePasswordLogin : handleRegister}
-                disabled={isLoading}
-            >
-                {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{authMode === 'login' ? 'Login' : 'Register'}</Text>}
-            </TouchableOpacity>
-            <View style={styles.switchAuthContainer}>
-                <Text style={styles.switchAuthText}>{authMode === 'login' ? "Don't have an account? " : "Already have an account? "}</Text>
-                <TouchableOpacity onPress={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}>
-                    <Text style={styles.switchAuthButtonText}>{authMode === 'login' ? 'Register' : 'Login'}</Text>
-                </TouchableOpacity>
-            </View>
-            <TouchableOpacity onPress={() => { setStep('citizenLoginMethod'); setError(''); setAuthMode('login'); }} style={styles.backButton}>
-                <Text style={styles.backButtonText}>Back</Text>
-            </TouchableOpacity>
-        </View>
-        {error && <Text style={styles.errorText}>{error}</Text>}
-    </View>
-  );
-
-  const renderPoliceLogin = () => (
-    <View>
-        <Text style={styles.titleSmall}>{policeAuthMode === 'login' ? 'Police Department Login' : 'Police Officer Registration'}</Text>
-        <View style={styles.buttonGroup}>
-            {policeAuthMode === 'register' && (
-                <>
-                    <TextInput style={styles.input} placeholder="Full Name" placeholderTextColor="#64748b" value={policeName} onChangeText={setPoliceName} />
-                    <TextInput style={styles.input} placeholder="Designation (e.g., Officer)" placeholderTextColor="#64748b" value={policeDesignation} onChangeText={setPoliceDesignation} />
-                </>
-            )}
-            <TextInput style={styles.input} placeholder="Badge Number" placeholderTextColor="#64748b" value={policeBadgeNumber} onChangeText={setPoliceBadgeNumber} autoCapitalize="none"/>
-            {policeAuthMode === 'register' && (
-                <TextInput style={styles.input} placeholder="Phone Number" placeholderTextColor="#64748b" value={policePhoneNumber} onChangeText={setPolicePhoneNumber} keyboardType="phone-pad" />
-            )}
             <TouchableOpacity
-                style={[styles.buttonSecondary, isLoading && styles.buttonDisabled]}
-                onPress={policeAuthMode === 'login' ? handlePoliceBadgeLogin : handlePoliceRegister}
-                disabled={isLoading}
+                style={[styles.roleButton, styles.citizenButton]}
+                onPress={() => setStep('citizenLoginMethod')}
             >
-                {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonTextSecondary}>{policeAuthMode === 'login' ? 'Login' : 'Register'}</Text>}
+                <UserIcon width={64} height={64} color="#fff" />
+                <Text style={styles.roleButtonText}>I am a Citizen</Text>
             </TouchableOpacity>
-            <View style={styles.switchAuthContainer}>
-                <Text style={styles.switchAuthText}>{policeAuthMode === 'login' ? "Don't have access? " : "Already registered? "}</Text>
-                <TouchableOpacity onPress={() => setPoliceAuthMode(policeAuthMode === 'login' ? 'register' : 'login')}>
-                    <Text style={styles.switchAuthButtonText}>{policeAuthMode === 'login' ? 'Register here' : 'Login here'}</Text>
+            <TouchableOpacity
+                style={[styles.roleButton, styles.policeButton]}
+                onPress={() => { setStep('policeLogin'); setError(''); }}
+            >
+                <SirenIcon width={64} height={64} color="#e2e8f0" />
+                <Text style={[styles.roleButtonText, { color: '#e2e8f0' }]}>I am a Police Officer</Text>
+            </TouchableOpacity>
+        </View>
+    );
+
+    const renderCitizenLoginMethodSelection = () => (
+        <View>
+            <Text style={styles.titleSmall}>Citizen Login</Text>
+            <View style={styles.buttonGroup}>
+                <TouchableOpacity style={styles.buttonPrimary} onPress={() => setStep('mobileInput')}>
+                    <Text style={styles.buttonText}>Login with Mobile OTP</Text>
+                </TouchableOpacity>
+                <TouchableOpacity style={styles.buttonSecondary} onPress={() => setStep('passwordLogin')}>
+                    <Text style={styles.buttonTextSecondary}>Login with Username/Password</Text>
+                </TouchableOpacity>
+                <View style={styles.orDivider}>
+                    <View style={styles.dividerLine} />
+                    <Text style={styles.orText}>OR</Text>
+                    <View style={styles.dividerLine} />
+                </View>
+                <TouchableOpacity style={styles.buttonTertiary} onPress={handleGuestLogin}>
+                    <Text style={styles.buttonTextTertiary}>Continue as Guest</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => { setStep('role'); setError(''); }} style={styles.backButton}>
+                    <Text style={styles.backButtonText}>Back to Role Selection</Text>
                 </TouchableOpacity>
             </View>
-            <TouchableOpacity onPress={() => { setStep('role'); setError(''); setPoliceAuthMode('login'); }} style={styles.backButton}>
-                <Text style={styles.backButtonText}>Back</Text>
-            </TouchableOpacity>
         </View>
-        {error && <Text style={styles.errorText}>{error}</Text>}
-    </View>
-  );
+    );
 
-  const renderContent = () => {
-    switch(step) {
-        case 'citizenLoginMethod': return renderCitizenLoginMethodSelection();
-        case 'mobileInput': return renderMobileInput();
-        case 'otpInput': return renderOtpInput();
-        case 'passwordLogin': return renderPasswordLogin();
-        case 'policeLogin': return renderPoliceLogin();
-        case 'role': default: return renderRoleSelection();
+    const renderMobileInput = () => (
+        <View>
+            <Text style={styles.titleSmall}>Login with OTP</Text>
+            <View style={styles.buttonGroup}>
+                <TextInput
+                    style={styles.input}
+                    placeholder="10-digit mobile number"
+                    placeholderTextColor="#64748b"
+                    keyboardType="phone-pad"
+                    value={mobileNumber}
+                    onChangeText={setMobileNumber}
+                    maxLength={10}
+                    autoFocus
+                />
+                <TouchableOpacity
+                    style={[styles.buttonPrimary, isSendingOtp && styles.buttonDisabled]}
+                    onPress={handleSendOtp}
+                    disabled={isSendingOtp}
+                >
+                    {isSendingOtp ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Send OTP</Text>}
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => { setStep('citizenLoginMethod'); setError(''); }} style={styles.backButton}>
+                    <Text style={styles.backButtonText}>Back</Text>
+                </TouchableOpacity>
+            </View>
+            {error && <Text style={styles.errorText}>{error}</Text>}
+        </View>
+    );
+
+    const renderOtpInput = () => (
+        <View>
+            <Text style={styles.titleSmall}>Verify OTP</Text>
+            <Text style={styles.subtitle}>Enter the 6-digit code sent to {mobileNumber}.</Text>
+            <View style={styles.buttonGroup}>
+                <TextInput
+                    style={[styles.input, { letterSpacing: 8 }]}
+                    placeholder="6-digit OTP"
+                    placeholderTextColor="#64748b"
+                    keyboardType="number-pad"
+                    value={otp}
+                    onChangeText={setOtp}
+                    maxLength={6}
+                    autoFocus
+                />
+                <TouchableOpacity style={styles.buttonPrimary} onPress={handleVerifyOtp}>
+                    <Text style={styles.buttonText}>Verify & Login</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => { setStep('mobileInput'); setError(''); }} style={styles.backButton}>
+                    <Text style={styles.backButtonText}>Back to Mobile Entry</Text>
+                </TouchableOpacity>
+            </View>
+            {error && <Text style={styles.errorText}>{error}</Text>}
+        </View>
+    );
+
+    const renderPasswordLogin = () => (
+        <View>
+            <Text style={styles.titleSmall}>{authMode === 'login' ? 'Login with Password' : 'Register Account'}</Text>
+            <View style={styles.buttonGroup}>
+                <TextInput style={styles.input} placeholder="Username" placeholderTextColor="#64748b" value={username} onChangeText={setUsername} autoCapitalize="none" />
+                <TextInput style={styles.input} placeholder="Password" placeholderTextColor="#64748b" value={password} onChangeText={setPassword} secureTextEntry />
+                <TouchableOpacity
+                    style={[styles.buttonPrimary, isLoading && styles.buttonDisabled]}
+                    onPress={authMode === 'login' ? handlePasswordLogin : handleRegister}
+                    disabled={isLoading}
+                >
+                    {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>{authMode === 'login' ? 'Login' : 'Register'}</Text>}
+                </TouchableOpacity>
+                <View style={styles.switchAuthContainer}>
+                    <Text style={styles.switchAuthText}>{authMode === 'login' ? "Don't have an account? " : "Already have an account? "}</Text>
+                    <TouchableOpacity onPress={() => setAuthMode(authMode === 'login' ? 'register' : 'login')}>
+                        <Text style={styles.switchAuthButtonText}>{authMode === 'login' ? 'Register' : 'Login'}</Text>
+                    </TouchableOpacity>
+                </View>
+                <TouchableOpacity onPress={() => { setStep('citizenLoginMethod'); setError(''); setAuthMode('login'); }} style={styles.backButton}>
+                    <Text style={styles.backButtonText}>Back</Text>
+                </TouchableOpacity>
+            </View>
+            {error && <Text style={styles.errorText}>{error}</Text>}
+        </View>
+    );
+
+    const renderPoliceLogin = () => (
+        <View>
+            <Text style={styles.titleSmall}>{policeAuthMode === 'login' ? 'Police Department Login' : 'Police Officer Registration'}</Text>
+            <View style={styles.buttonGroup}>
+                {policeAuthMode === 'register' && (
+                    <>
+                        <TextInput style={styles.input} placeholder="Full Name" placeholderTextColor="#64748b" value={policeName} onChangeText={setPoliceName} />
+                        <TextInput style={styles.input} placeholder="Designation (e.g., Officer)" placeholderTextColor="#64748b" value={policeDesignation} onChangeText={setPoliceDesignation} />
+                    </>
+                )}
+                <TextInput style={styles.input} placeholder="Badge Number" placeholderTextColor="#64748b" value={policeBadgeNumber} onChangeText={setPoliceBadgeNumber} autoCapitalize="none" />
+                {policeAuthMode === 'register' && (
+                    <TextInput style={styles.input} placeholder="Phone Number" placeholderTextColor="#64748b" value={policePhoneNumber} onChangeText={setPolicePhoneNumber} keyboardType="phone-pad" />
+                )}
+                <TouchableOpacity
+                    style={[styles.buttonSecondary, isLoading && styles.buttonDisabled]}
+                    onPress={policeAuthMode === 'login' ? handlePoliceBadgeLogin : handlePoliceRegister}
+                    disabled={isLoading}
+                >
+                    {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonTextSecondary}>{policeAuthMode === 'login' ? 'Login' : 'Register'}</Text>}
+                </TouchableOpacity>
+                <View style={styles.switchAuthContainer}>
+                    <Text style={styles.switchAuthText}>{policeAuthMode === 'login' ? "Don't have access? " : "Already registered? "}</Text>
+                    <TouchableOpacity onPress={() => setPoliceAuthMode(policeAuthMode === 'login' ? 'register' : 'login')}>
+                        <Text style={styles.switchAuthButtonText}>{policeAuthMode === 'login' ? 'Register here' : 'Login here'}</Text>
+                    </TouchableOpacity>
+                </View>
+                <TouchableOpacity onPress={() => { setStep('role'); setError(''); setPoliceAuthMode('login'); }} style={styles.backButton}>
+                    <Text style={styles.backButtonText}>Back</Text>
+                </TouchableOpacity>
+            </View>
+            {error && <Text style={styles.errorText}>{error}</Text>}
+        </View>
+    );
+
+    const renderContent = () => {
+        switch (step) {
+            case 'citizenLoginMethod': return renderCitizenLoginMethodSelection();
+            case 'mobileInput': return renderMobileInput();
+            case 'otpInput': return renderOtpInput();
+            case 'passwordLogin': return renderPasswordLogin();
+            case 'policeLogin': return renderPoliceLogin();
+            case 'role': default: return renderRoleSelection();
+        }
     }
-  }
 
-  return (
-    <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{flex: 1}}>
-    <ScrollView contentContainerStyle={styles.container}>
-      <Animated.View style={[styles.toast, { transform: [{ translateY: toastAnim }] }]}>
-          <Text style={styles.toastHeader}>Message from 555-0101</Text>
-          <Text style={styles.toastBody}>Your Citizen Safety code is: <Text style={{fontWeight: 'bold'}}>{generatedOtp}</Text></Text>
-      </Animated.View>
-      <View style={styles.card}>
-        <View style={styles.cardHeader}>
-            <SirenIcon width={48} height={48} color="#f43f5e" />
-            <Text style={styles.title}>Citizen Safety</Text>
-            {step === 'role' && <Text style={styles.subtitle}>Please select your role to proceed.</Text>}
-        </View>
-        {renderContent()}
-      </View>
-    </ScrollView>
-    </KeyboardAvoidingView>
-  );
+    return (
+        <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
+            <ScrollView contentContainerStyle={styles.container}>
+                <Animated.View style={[styles.toast, { transform: [{ translateY: toastAnim }] }]}>
+                    <Text style={styles.toastHeader}>Message from 555-0101</Text>
+                    <Text style={styles.toastBody}>Your Citizen Safety code is: <Text style={{ fontWeight: 'bold' }}>{generatedOtp}</Text></Text>
+                </Animated.View>
+                <View style={styles.card}>
+                    <View style={styles.cardHeader}>
+                        <SirenIcon width={48} height={48} color="#f43f5e" />
+                        <Text style={styles.title}>Citizen Safety</Text>
+                        {step === 'role' && <Text style={styles.subtitle}>Please select your role to proceed.</Text>}
+                    </View>
+                    {renderContent()}
+                </View>
+            </ScrollView>
+        </KeyboardAvoidingView>
+    );
 };
 
 const styles = StyleSheet.create({

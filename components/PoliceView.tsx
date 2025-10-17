@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
 import * as Location from 'expo-location';
 import { User, Alert } from '../types';
-import { acceptAlert, resolveAlert, updatePoliceLocation, deleteAlert } from '../backend';
+import { backendService }  from '../services/BackendService';
 import AlertCard from './AlertCard';
 import PoliceHistoryCard from './PoliceHistoryCard';
 import PoliceAlertDetails from './PoliceAlertDetails';
@@ -74,7 +74,7 @@ const PoliceView: React.FC<PoliceViewProps> = ({ currentUser, alerts, setAlerts,
                 },
                 (position) => {
                     const newLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
-                    updatePoliceLocation(myBadgeNumber, newLocation).catch(err => console.error("Failed to update location:", err));
+                    backendService.updatePoliceLocation(myBadgeNumber, newLocation).catch(err => console.error("Failed to update location:", err));
                 }
             );
         };
@@ -89,7 +89,7 @@ const PoliceView: React.FC<PoliceViewProps> = ({ currentUser, alerts, setAlerts,
     const handleAcceptAlert = async (alertId: number) => {
         setIsProcessing(true);
         try {
-            const updatedAlert = await acceptAlert(alertId, myBadgeNumber);
+            const updatedAlert = await backendService.acceptAlert(alertId, myBadgeNumber);
             setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, ...updatedAlert } : a));
             setSelectedAlert(prev => prev && prev.id === alertId ? { ...prev, ...updatedAlert } : prev);
         } catch (error) {
@@ -102,7 +102,7 @@ const PoliceView: React.FC<PoliceViewProps> = ({ currentUser, alerts, setAlerts,
     const handleResolveAlert = async (alertId: number) => {
         setIsProcessing(true);
         try {
-            const updatedAlert = await resolveAlert(alertId);
+            const updatedAlert = await backendService.resolveAlert(alertId);
             setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, ...updatedAlert } : a));
         } catch (error) {
             console.error("Failed to resolve alert:", error);
@@ -113,7 +113,7 @@ const PoliceView: React.FC<PoliceViewProps> = ({ currentUser, alerts, setAlerts,
 
     const handleDeleteFromHistory = async (alertId: number) => {
         try {
-            await deleteAlert(alertId);
+            await backendService.deleteAlert(alertId);
             setAlerts(prev => prev.filter(a => a.id !== alertId));
         } catch (error) {
             console.error("Failed to delete alert:", error);

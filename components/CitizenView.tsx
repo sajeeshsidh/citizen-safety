@@ -4,7 +4,7 @@ import * as Location from 'expo-location';
 import * as FileSystem from 'expo-file-system/legacy';
 import { useAudioRecorder, AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorderState } from 'expo-audio';
 import { User, Alert } from '../types';
-import { createAlert, deleteAlert, cancelAlert } from '../backend';
+import { backendService } from '../services/BackendService';
 import ShieldCheckIcon from './icons/ShieldCheckIcon';
 import MapPinIcon from './icons/MapPinIcon';
 import MicrophoneIcon from './icons/MicrophoneIcon';
@@ -173,7 +173,7 @@ const CitizenView: React.FC<CitizenViewProps> = ({ currentUser, alerts, setAlert
                     encoding: 'base64',
                 });
 
-                const newAlert = await createAlert({
+                const newAlert = await backendService.createAlert({
                     citizenId: currentUser.mobile,
                     audioBase64: audioBase64,
                     location: { lat: location.latitude, lng: location.longitude },
@@ -206,7 +206,7 @@ const CitizenView: React.FC<CitizenViewProps> = ({ currentUser, alerts, setAlert
         }
         setIsSending(true);
         try {
-            const newAlert = await createAlert({
+            const newAlert = await backendService.createAlert({
                 citizenId: currentUser.mobile,
                 message,
                 location: { lat: location.latitude, lng: location.longitude }
@@ -225,7 +225,7 @@ const CitizenView: React.FC<CitizenViewProps> = ({ currentUser, alerts, setAlert
         if (!activeAlert) return;
         setIsCanceling(true);
         try {
-            const updatedAlert = await cancelAlert(activeAlert.id);
+            const updatedAlert = await backendService.cancelAlert(activeAlert.id);
             setAlerts(prev => prev.map(a => (a.id === updatedAlert.id ? updatedAlert : a)));
             router.replace('/citizen');
         } catch (error) {
@@ -239,10 +239,10 @@ const CitizenView: React.FC<CitizenViewProps> = ({ currentUser, alerts, setAlert
     const handleDeleteAlert = async (alert: Alert) => {
         try {
             if (alert.status === 'new' || alert.status === 'accepted') {
-                const updatedAlert = await cancelAlert(alert.id);
+                const updatedAlert = await backendService.cancelAlert(alert.id);
                 setAlerts(prev => prev.map(a => (a.id === updatedAlert.id ? updatedAlert : a)));
             } else {
-                await deleteAlert(alert.id);
+                await backendService.deleteAlert(alert.id);
                 setAlerts(prev => prev.filter(a => a.id !== alert.id));
             }
         } catch (error) {

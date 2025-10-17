@@ -1,5 +1,5 @@
 import { User, Alert } from '../types';
-//import { fetchAlerts } from '../backend';
+import * as backendApi from './backend';
 
 // IMPORTANT: Replace 'YOUR_LOCAL_IP' with your computer's local network IP address
 const WS_URL = 'wss://citizen-safety-server.onrender.com';
@@ -16,6 +16,21 @@ class BackendService {
     private callbacks: ServiceCallbacks | null = null;
     private isConnecting = false;
     private reconnectTimeoutId: number | undefined;
+
+    // --- API Methods (pass-through to the api client) ---
+    registerCitizen = backendApi.registerCitizen;
+    loginCitizen = backendApi.loginCitizen;
+    registerPolice = backendApi.registerPolice;
+    loginPolice = backendApi.loginPolice;
+    updatePoliceLocation = backendApi.updatePoliceLocation;
+    fetchPoliceLocations = backendApi.fetchPoliceLocations;
+    fetchAlerts = backendApi.fetchAlerts;
+    createAlert = backendApi.createAlert;
+    acceptAlert = backendApi.acceptAlert;
+    resolveAlert = backendApi.resolveAlert;
+    cancelAlert = backendApi.cancelAlert;
+    deleteAlert = backendApi.deleteAlert;
+    clearAlerts = backendApi.clearAlerts;
 
     /**
      * Initializes the service and its callbacks. Called once on app startup.
@@ -116,11 +131,15 @@ class BackendService {
         const { role, mobile } = this.currentUser;
 
         if (role === 'police') {
-            newAlerts.filter(
+            const newIncomingAlerts = newAlerts.filter(
                 (newAlert) =>
                     newAlert.status === 'new' &&
                     !oldAlerts.some((oldAlert) => oldAlert.id === newAlert.id)
             );
+
+            if (newIncomingAlerts.length > 0) {
+                this.callbacks.onNotification('New Incoming Alert!', `${newIncomingAlerts.length} new emergency alert(s) received.`);
+            }
         } else if (role === 'citizen') {
             const justAcceptedAlert = newAlerts.find(
                 (newAlert) =>

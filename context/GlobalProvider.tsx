@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef, createContext, useContext, ReactNod
 import { Alert as RNAlert } from 'react-native';
 import { User, Alert } from '../types';
 import { backendService } from '../services/BackendService';
-import { fetchAlerts } from '../backend';
 
 // Define the shape of the context state
 interface GlobalContextType {
@@ -54,7 +53,7 @@ export const GlobalProvider = ({ children }: { children: ReactNode }) => {
         console.log('provider: fetch Alerts');
         // Immediately fetch the initial state to avoid a delay from the WebSocket connection.
         try {
-            const initialAlerts: Alert[] = await fetchAlerts();
+            const initialAlerts: Alert[] = await backendService.fetchAlerts();
             setAlerts(initialAlerts);
         } catch (error) {
             console.error("Failed to fetch initial alerts on login:", error);

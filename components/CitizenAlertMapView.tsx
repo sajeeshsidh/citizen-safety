@@ -2,19 +2,19 @@ import React, { useRef, useEffect, useState } from 'react';
 import { View, StyleSheet, Text, Animated } from 'react-native';
 import MapView, { Marker, Circle, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
 import { type Alert, type Location } from '../types';
-import { fetchPoliceLocations } from '../backend';
+import { backendService } from '../services/BackendService';
 import { mapStyle } from '../mapStyle';
 
 interface CitizenAlertMapViewProps {
     alert: Alert;
-  citizenLocation: Location;
-  onClick?: () => void;
+    citizenLocation: Location;
+    onClick?: () => void;
 }
 
 const CitizenAlertMapView: React.FC<CitizenAlertMapViewProps> = ({ alert, citizenLocation, onClick }) => {
     const [officerLocation, setOfficerLocation] = useState<Location | null>(null);
     const mapRef = useRef<MapView>(null);
-    
+
     // Animated value for the search radius
     const radiusAnim = useRef(new Animated.Value(alert.searchRadius || 0)).current;
 
@@ -27,18 +27,18 @@ const CitizenAlertMapView: React.FC<CitizenAlertMapViewProps> = ({ alert, citize
             }).start();
         }
     }, [alert.searchRadius]);
-    
+
     useEffect(() => {
         let intervalId: number | undefined;
 
         const updateOfficerPosition = async () => {
             if (!alert.acceptedBy) return;
             try {
-                const officers = await fetchPoliceLocations();
+                const officers = await backendService.fetchPoliceLocations();
                 const respondingOfficer = officers.find(o => o.badgeNumber === alert.acceptedBy);
                 if (respondingOfficer) {
                     setOfficerLocation(respondingOfficer.location);
-                    
+
                     // Fit map to both citizen and officer
                     mapRef.current?.fitToCoordinates(
                         [
@@ -76,10 +76,10 @@ const CitizenAlertMapView: React.FC<CitizenAlertMapViewProps> = ({ alert, citize
                 style={StyleSheet.absoluteFillObject}
                 customMapStyle={mapStyle}
                 initialRegion={{
-                  latitude: citizenLocation.lat,
-                  longitude: citizenLocation.lng,
-                  latitudeDelta: 0.0922,
-                  longitudeDelta: 0.0421,
+                    latitude: citizenLocation.lat,
+                    longitude: citizenLocation.lng,
+                    latitudeDelta: 0.0922,
+                    longitudeDelta: 0.0421,
                 }}
                 onPress={onClick}
                 scrollEnabled={!!onClick}
@@ -87,7 +87,7 @@ const CitizenAlertMapView: React.FC<CitizenAlertMapViewProps> = ({ alert, citize
             >
                 {/* Citizen Marker */}
                 <Marker coordinate={{ latitude: citizenLocation.lat, longitude: citizenLocation.lng }} pinColor="red" />
-                
+
                 {/* Officer Marker */}
                 {officerLocation && (
                     <Marker coordinate={{ latitude: officerLocation.lat, longitude: officerLocation.lng }} pinColor="blue" />
