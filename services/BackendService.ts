@@ -2,7 +2,7 @@ import { User, Alert } from '../types';
 //import { fetchAlerts } from '../backend';
 
 // IMPORTANT: Replace 'YOUR_LOCAL_IP' with your computer's local network IP address
-const WS_URL = 'ws://192.168.1.6:3001';
+const WS_URL = 'wss://citizen-safety-server.onrender.com';
 
 interface ServiceCallbacks {
     onAlertsUpdate: (alerts: Alert[]) => void;

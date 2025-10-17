@@ -4,7 +4,7 @@
 // Ensure the server is running (see README.md).
 import { Alert, Location, PoliceOfficer } from './types';
 
-const API_BASE_URL = 'http://192.168.1.6:3001/api';
+const API_BASE_URL = 'https://citizen-safety-server.onrender.com/api';
 
 // --- Data Structures ---
 
