@@ -1,16 +1,20 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ScrollView, Animated, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { User } from '../types';
 import UserIcon from './icons/UserIcon';
 import SirenIcon from './icons/SirenIcon';
 import { backendService } from '../services/BackendService';
+import { useRouter } from 'expo-router';
+
+export type LoginViewStep = 'role' | 'citizenLoginMethod' | 'mobileInput' | 'otpInput' | 'passwordLogin' | 'policeLogin';
 
 interface LoginViewProps {
     onLogin: (user: User) => void;
+    view: LoginViewStep;
 }
 
-const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
-    const [step, setStep] = useState<'role' | 'citizenLoginMethod' | 'mobileInput' | 'otpInput' | 'passwordLogin' | 'policeLogin'>('role');
+const LoginView: React.FC<LoginViewProps> = ({ onLogin, view }) => {
+    const router = useRouter();
     const [mobileNumber, setMobileNumber] = useState('');
     const [otp, setOtp] = useState('');
     const [generatedOtp, setGeneratedOtp] = useState('');
@@ -28,10 +32,6 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     const [policePhoneNumber, setPolicePhoneNumber] = useState('');
 
     const toastAnim = useRef(new Animated.Value(-150)).current;
-
-    useEffect(() => {
-        // This effect can be used to trigger the animation
-    }, []);
 
     const showOtpToast = () => {
         Animated.sequence([
@@ -66,7 +66,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
             const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
             setGeneratedOtp(newOtp);
             setIsSendingOtp(false);
-            setStep('otpInput');
+            router.push('/?view=otpInput');
             showOtpToast();
         }, 1500);
     };
@@ -162,18 +162,23 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         }
     };
 
+    const handleBack = () => {
+        setError('');
+        router.back();
+    };
+
     const renderRoleSelection = () => (
         <View style={styles.buttonGroup}>
             <TouchableOpacity
                 style={[styles.roleButton, styles.citizenButton]}
-                onPress={() => setStep('citizenLoginMethod')}
+                onPress={() => router.push('/?view=citizenLoginMethod')}
             >
                 <UserIcon width={64} height={64} color="#fff" />
                 <Text style={styles.roleButtonText}>I am a Citizen</Text>
             </TouchableOpacity>
             <TouchableOpacity
                 style={[styles.roleButton, styles.policeButton]}
-                onPress={() => { setStep('policeLogin'); setError(''); }}
+                onPress={() => { router.push('/?view=policeLogin'); setError(''); }}
             >
                 <SirenIcon width={64} height={64} color="#e2e8f0" />
                 <Text style={[styles.roleButtonText, { color: '#e2e8f0' }]}>I am a Police Officer</Text>
@@ -185,10 +190,10 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
         <View>
             <Text style={styles.titleSmall}>Citizen Login</Text>
             <View style={styles.buttonGroup}>
-                <TouchableOpacity style={styles.buttonPrimary} onPress={() => setStep('mobileInput')}>
+                <TouchableOpacity style={styles.buttonPrimary} onPress={() => router.push('/?view=mobileInput')}>
                     <Text style={styles.buttonText}>Login with Mobile OTP</Text>
                 </TouchableOpacity>
-                <TouchableOpacity style={styles.buttonSecondary} onPress={() => setStep('passwordLogin')}>
+                <TouchableOpacity style={styles.buttonSecondary} onPress={() => router.push('/?view=passwordLogin')}>
                     <Text style={styles.buttonTextSecondary}>Login with Username/Password</Text>
                 </TouchableOpacity>
                 <View style={styles.orDivider}>
@@ -199,7 +204,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                 <TouchableOpacity style={styles.buttonTertiary} onPress={handleGuestLogin}>
                     <Text style={styles.buttonTextTertiary}>Continue as Guest</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => { setStep('role'); setError(''); }} style={styles.backButton}>
+                <TouchableOpacity onPress={handleBack} style={styles.backButton}>
                     <Text style={styles.backButtonText}>Back to Role Selection</Text>
                 </TouchableOpacity>
             </View>
@@ -227,7 +232,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                 >
                     {isSendingOtp ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Send OTP</Text>}
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => { setStep('citizenLoginMethod'); setError(''); }} style={styles.backButton}>
+                <TouchableOpacity onPress={handleBack} style={styles.backButton}>
                     <Text style={styles.backButtonText}>Back</Text>
                 </TouchableOpacity>
             </View>
@@ -253,7 +258,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                 <TouchableOpacity style={styles.buttonPrimary} onPress={handleVerifyOtp}>
                     <Text style={styles.buttonText}>Verify & Login</Text>
                 </TouchableOpacity>
-                <TouchableOpacity onPress={() => { setStep('mobileInput'); setError(''); }} style={styles.backButton}>
+                <TouchableOpacity onPress={handleBack} style={styles.backButton}>
                     <Text style={styles.backButtonText}>Back to Mobile Entry</Text>
                 </TouchableOpacity>
             </View>
@@ -280,7 +285,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                         <Text style={styles.switchAuthButtonText}>{authMode === 'login' ? 'Register' : 'Login'}</Text>
                     </TouchableOpacity>
                 </View>
-                <TouchableOpacity onPress={() => { setStep('citizenLoginMethod'); setError(''); setAuthMode('login'); }} style={styles.backButton}>
+                <TouchableOpacity onPress={handleBack} style={styles.backButton}>
                     <Text style={styles.backButtonText}>Back</Text>
                 </TouchableOpacity>
             </View>
@@ -298,7 +303,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                         <TextInput style={styles.input} placeholder="Designation (e.g., Officer)" placeholderTextColor="#64748b" value={policeDesignation} onChangeText={setPoliceDesignation} />
                     </>
                 )}
-                <TextInput style={styles.input} placeholder="Badge Number" placeholderTextColor="#64748b" value={policeBadgeNumber} onChangeText={setPoliceBadgeNumber} autoCapitalize="none" />
+                <TextInput style={styles.input} placeholder="Badge Number" placeholderTextColor="#64748b" value={policeBadgeNumber} onChangeText={setPoliceBadgeNumber} autoCapitalize="none" keyboardType="phone-pad" />
                 {policeAuthMode === 'register' && (
                     <TextInput style={styles.input} placeholder="Phone Number" placeholderTextColor="#64748b" value={policePhoneNumber} onChangeText={setPolicePhoneNumber} keyboardType="phone-pad" />
                 )}
@@ -315,7 +320,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                         <Text style={styles.switchAuthButtonText}>{policeAuthMode === 'login' ? 'Register here' : 'Login here'}</Text>
                     </TouchableOpacity>
                 </View>
-                <TouchableOpacity onPress={() => { setStep('role'); setError(''); setPoliceAuthMode('login'); }} style={styles.backButton}>
+                <TouchableOpacity onPress={handleBack} style={styles.backButton}>
                     <Text style={styles.backButtonText}>Back</Text>
                 </TouchableOpacity>
             </View>
@@ -324,7 +329,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
     );
 
     const renderContent = () => {
-        switch (step) {
+        switch (view) {
             case 'citizenLoginMethod': return renderCitizenLoginMethodSelection();
             case 'mobileInput': return renderMobileInput();
             case 'otpInput': return renderOtpInput();
@@ -345,7 +350,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin }) => {
                     <View style={styles.cardHeader}>
                         <SirenIcon width={48} height={48} color="#f43f5e" />
                         <Text style={styles.title}>Citizen Safety</Text>
-                        {step === 'role' && <Text style={styles.subtitle}>Please select your role to proceed.</Text>}
+                        {view === 'role' && <Text style={styles.subtitle}>Please select your role to proceed.</Text>}
                     </View>
                     {renderContent()}
                 </View>

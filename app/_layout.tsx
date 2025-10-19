@@ -80,6 +80,15 @@ function AppLayout() {
     // Handle Android back button press
     useEffect(() => {
         const onBackPress = () => {
+            if (pathname === '/') {
+                // If we are on a sub-view of the login page (e.g., otpInput), and can go back, then go back.
+                if (params.view && params.view !== 'role' && router.canGoBack()) {
+                    router.back();
+                    return true; // We've handled the back press.
+                }
+                // If on the initial role selection screen, or cannot go back, allow the app to exit.
+                return false;
+            }
             // First, handle navigation from sub-views (like history or active alert)
             // back to the main screen for that role. The `params.view` check is key.
             if ((pathname === '/citizen' || pathname === '/police') && params.view) {
@@ -106,10 +115,10 @@ function AppLayout() {
             }
 
             // Fallback for any other screen. If the router can go back, let it.
-            if (router.canGoBack()) {
-                router.back();
-                return true;
-            }
+            //if (router.canGoBack()) {
+            //    router.back();
+            //    return true;
+            //}
 
             // If on the login screen or cannot go back, allow the app to exit.
             return false;
