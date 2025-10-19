@@ -30,6 +30,7 @@ class BackendService {
     updatePolicePushToken = backendApi.updatePolicePushToken;
     updatePoliceLocation = backendApi.updatePoliceLocation;
     fetchPoliceLocations = backendApi.fetchPoliceLocations;
+    fetchRoute = backendApi.fetchRoute;
     fetchAlerts = backendApi.fetchAlerts;
     createAlert = backendApi.createAlert;
     acceptAlert = backendApi.acceptAlert;

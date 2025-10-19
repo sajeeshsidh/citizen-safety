@@ -130,6 +130,16 @@ export const fetchPoliceLocations = async (): Promise<PoliceOfficer[]> => {
     return handleResponse(response);
 }
 
+/**
+ * Fetches a turn-by-turn route from the backend.
+ */
+export const fetchRoute = async (origin: Location, destination: Location): Promise<Location[]> => {
+    const originString = `${origin.lat},${origin.lng}`;
+    const destinationString = `${destination.lat},${destination.lng}`;
+    const response = await fetch(`${API_BASE_URL}/route?origin=${originString}&destination=${destinationString}`);
+    return handleResponse(response);
+}
+
 
 // --- Alert API ---
 
