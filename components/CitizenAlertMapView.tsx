@@ -1,6 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { View, StyleSheet, Text, Animated } from 'react-native';
-import MapView, { Marker, Circle, Polyline, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, Circle, PROVIDER_GOOGLE } from 'react-native-maps';
 import { type Alert, type Location } from '../types';
 import { backendService } from '../services/BackendService';
 import { mapStyle } from '../mapStyle';
@@ -63,10 +63,10 @@ const CitizenAlertMapView: React.FC<CitizenAlertMapViewProps> = ({ alert, citize
         };
     }, [alert.status, alert.acceptedBy, citizenLocation]);
 
-    const animatedRadiusValue = radiusAnim.interpolate({
-        inputRange: [0, 10],
-        outputRange: [0, 10000], // Convert km to meters
-    });
+    //const animatedRadiusValue = radiusAnim.interpolate({
+    //    inputRange: [0, 10],
+    //    outputRange: [0, 10000], // Convert km to meters
+    //});
 
     return (
         <View style={styles.container}>

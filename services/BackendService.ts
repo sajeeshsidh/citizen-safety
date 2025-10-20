@@ -1,8 +1,13 @@
 import { User, Alert } from '../types';
 import * as backendApi from './backend';
 
-// IMPORTANT: Replace 'YOUR_LOCAL_IP' with your computer's local network IP address
-const WS_URL = 'wss://citizen-safety-server.onrender.com';
+// Use __DEV__ global variable (provided by React Native) to determine the environment.
+const IS_DEV = __DEV__;
+
+const PROD_WS_URL = 'wss://citizen-safety-server.onrender.com';
+const DEV_WS_URL = 'http://192.168.1.6:3001/api';
+
+const WS_URL = IS_DEV ? DEV_WS_URL : PROD_WS_URL;
 
 interface ServiceCallbacks {
     onAlertsUpdate: (alerts: Alert[]) => void;
@@ -22,8 +27,10 @@ class BackendService {
     loginCitizen = backendApi.loginCitizen;
     registerPolice = backendApi.registerPolice;
     loginPolice = backendApi.loginPolice;
+    updatePolicePushToken = backendApi.updatePolicePushToken;
     updatePoliceLocation = backendApi.updatePoliceLocation;
     fetchPoliceLocations = backendApi.fetchPoliceLocations;
+    fetchRoute = backendApi.fetchRoute;
     fetchAlerts = backendApi.fetchAlerts;
     createAlert = backendApi.createAlert;
     acceptAlert = backendApi.acceptAlert;

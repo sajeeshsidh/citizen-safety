@@ -343,7 +343,7 @@ const CitizenView: React.FC<CitizenViewProps> = ({ currentUser, alerts, setAlert
                 keyboardShouldPersistTaps="handled"
             >
                 <View style={styles.headerRow}>
-                    <Text style={styles.title}>Send an Emergency Alert</Text>
+                    <Text style={styles.title}>Emergency Alert</Text>
                     {myAlerts.length > 0 && (
                         <Link href="/citizen?view=history" asChild>
                             <TouchableOpacity>

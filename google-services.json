@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "428708626223",
+    "project_id": "citizen-safety-8ded8",
+    "storage_bucket": "citizen-safety-8ded8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:428708626223:android:2557ce47205c62702e6bda",
+        "android_client_info": {
+          "package_name": "com.android.citizensafety"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBrgaGfMEnHVcpv9LJOCl_POQsBtgKiYwI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

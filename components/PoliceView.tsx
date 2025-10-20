@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform, Alert as RNAlert } from 'react-native';
 import * as Location from 'expo-location';
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
 import { User, Alert } from '../types';
-import { backendService }  from '../services/BackendService';
+import { backendService } from '../services/BackendService';
 import AlertCard from './AlertCard';
 import PoliceHistoryCard from './PoliceHistoryCard';
 import PoliceAlertDetails from './PoliceAlertDetails';
@@ -15,6 +17,48 @@ interface PoliceViewProps {
     alerts: Alert[];
     setAlerts: React.Dispatch<React.SetStateAction<Alert[]>>;
     view: 'live' | 'history';
+}
+
+async function registerForPushNotificationsAsync(badgeNumber: string) {
+    try {
+        if (!Device.isDevice) {
+            RNAlert.alert('Push Notification Info', 'Push notifications require a physical device and will not be enabled on simulators or emulators.');
+            return null;
+        }
+
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+        if (existingStatus !== 'granted') {
+            const { status } = await Notifications.requestPermissionsAsync();
+            finalStatus = status;
+        }
+        if (finalStatus !== 'granted') {
+            RNAlert.alert('Permission Denied', 'Failed to get permission for push notifications. You will not receive alerts when the app is closed.');
+            return null;
+        }
+
+        const token = (await Notifications.getExpoPushTokenAsync()).data;
+        console.log("Expo Push Token:", token);
+
+        // Send the token to your backend
+        await backendService.updatePolicePushToken(badgeNumber, token);
+        console.log(`Successfully sent push token for officer ${badgeNumber} to server.`);
+
+        if (Platform.OS === 'android') {
+            await Notifications.setNotificationChannelAsync('default', {
+                name: 'default',
+                importance: Notifications.AndroidImportance.MAX,
+                vibrationPattern: [0, 250, 250, 250],
+                lightColor: '#FF231F7C',
+            });
+        }
+
+        return token;
+    } catch (error: any) {
+        console.error("Error during push notification registration:", error);
+        RNAlert.alert('Push Notification Error', `An error occurred while registering for push notifications: ${error.message}`);
+        return null;
+    }
 }
 
 const PoliceView: React.FC<PoliceViewProps> = ({ currentUser, alerts, setAlerts, view }) => {
@@ -60,6 +104,9 @@ const PoliceView: React.FC<PoliceViewProps> = ({ currentUser, alerts, setAlerts,
     }, [alerts, view]);
 
     useEffect(() => {
+        // Register for push notifications when the component mounts for a logged-in officer
+        registerForPushNotificationsAsync(myBadgeNumber);
+
         const startLocationTracking = async () => {
             let { status } = await Location.requestForegroundPermissionsAsync();
             if (status !== 'granted') {
@@ -84,7 +131,7 @@ const PoliceView: React.FC<PoliceViewProps> = ({ currentUser, alerts, setAlerts,
         return () => {
             locationSubscription.current?.remove();
         };
-    }, []);
+    }, [myBadgeNumber]);
 
     const handleAcceptAlert = async (alertId: number) => {
         setIsProcessing(true);

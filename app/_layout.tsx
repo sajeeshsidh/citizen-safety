@@ -4,6 +4,23 @@ import { Stack, useRouter, usePathname, useGlobalSearchParams } from 'expo-route
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GlobalProvider, useGlobalContext } from '../context/GlobalProvider';
 import Header from '../components/Header';
+import * as Notifications from 'expo-notifications';
+
+// Define a type for the listener object returned by add...Listener functions
+// This object simply has a 'remove' method.
+type NotificationListener = { remove: () => void } | null;
+
+
+// Configure notification handling behavior
+Notifications.setNotificationHandler({
+    handleNotification: async () => ({
+        shouldShowAlert: true,
+        shouldPlaySound: true,
+        shouldSetBadge: true,
+        shouldShowBanner: true,
+        shouldShowList: true,
+    }),
+});
 
 // Main layout component that handles authentication redirects.
 function AppLayout() {
@@ -12,6 +29,41 @@ function AppLayout() {
     const pathname = usePathname();
     const params = useGlobalSearchParams(); // FIX: Use global params in the layout route
     const backHandlerCount = useRef(0);
+
+    // FIX: Use the custom defined type (NotificationListener) to avoid using the deprecated or unexported type.
+    const notificationListener = useRef<NotificationListener>(null);
+    const responseListener = useRef<NotificationListener>(null);
+
+    useEffect(() => {
+        // This listener is fired whenever a notification is received while the app is foregrounded
+        // The add...Listener functions return an object with a .remove() method
+        // which we've now correctly typed using the custom NotificationListener type.
+        const receivedListener = Notifications.addNotificationReceivedListener(notification => {
+            console.log("Notification received while app is foregrounded:", notification);
+        });
+
+        // We set the current property of the ref to the listener object returned by the function.
+        notificationListener.current = receivedListener;
+
+        // This listener is fired whenever a user taps on or interacts with a notification 
+        const responseHandler = Notifications.addNotificationResponseReceivedListener(response => {
+            console.log("Notification response received:", response);
+            if (currentUser?.role === 'police') {
+                router.replace('/police');
+            }
+        });
+
+        // We set the current property of the ref to the listener object returned by the function.
+        responseListener.current = responseHandler;
+
+
+        return () => {
+            // Cleanup: Use the modern listener.remove() method
+            notificationListener.current?.remove();
+            responseListener.current?.remove();
+        };
+    }, [currentUser]);
+
 
     useEffect(() => {
         const isAuthRoute = pathname === '/citizen' || pathname === '/police';
@@ -28,6 +80,15 @@ function AppLayout() {
     // Handle Android back button press
     useEffect(() => {
         const onBackPress = () => {
+            if (pathname === '/') {
+                // If we are on a sub-view of the login page (e.g., otpInput), and can go back, then go back.
+                if (params.view && params.view !== 'role' && router.canGoBack()) {
+                    router.back();
+                    return true; // We've handled the back press.
+                }
+                // If on the initial role selection screen, or cannot go back, allow the app to exit.
+                return false;
+            }
             // First, handle navigation from sub-views (like history or active alert)
             // back to the main screen for that role. The `params.view` check is key.
             if ((pathname === '/citizen' || pathname === '/police') && params.view) {
@@ -54,10 +115,10 @@ function AppLayout() {
             }
 
             // Fallback for any other screen. If the router can go back, let it.
-            if (router.canGoBack()) {
-                router.back();
-                return true;
-            }
+            //if (router.canGoBack()) {
+            //    router.back();
+            //    return true;
+            //}
 
             // If on the login screen or cannot go back, allow the app to exit.
             return false;
@@ -89,11 +150,11 @@ function AppLayout() {
 export default function RootLayout() {
     return (
         <SafeAreaProvider>
-        <>
-            <GlobalProvider>
-                <AppLayout />
-            </GlobalProvider>
-        </>
+            <>
+                <GlobalProvider>
+                    <AppLayout />
+                </GlobalProvider>
+            </>
         </SafeAreaProvider>
     );
 }
