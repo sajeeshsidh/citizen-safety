@@ -5,8 +5,9 @@ import UserIcon from './icons/UserIcon';
 import SirenIcon from './icons/SirenIcon';
 import { backendService } from '../services/BackendService';
 import { useRouter } from 'expo-router';
+import FireExtinguisherIcon from './icons/FireExtinguisherIcon';
 
-export type LoginViewStep = 'role' | 'citizenLoginMethod' | 'mobileInput' | 'otpInput' | 'passwordLogin' | 'policeLogin';
+export type LoginViewStep = 'role' | 'citizenLoginMethod' | 'mobileInput' | 'otpInput' | 'passwordLogin' | 'policeLogin' | 'firefighterLogin';
 
 interface LoginViewProps {
     onLogin: (user: User) => void;
@@ -30,6 +31,7 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, view }) => {
     const [policeDesignation, setPoliceDesignation] = useState('');
     const [policeBadgeNumber, setPoliceBadgeNumber] = useState('');
     const [policePhoneNumber, setPolicePhoneNumber] = useState('');
+    const [firefighterUnitNumber, setFirefighterUnitNumber] = useState('');
 
     const toastAnim = useRef(new Animated.Value(-150)).current;
 
@@ -53,7 +55,6 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, view }) => {
         onLogin({ mobile: 'Guest User', role: 'citizen' });
     };
 
-    // FIX: Removed event parameter from handler to match React Native's onPress signature.
     const handleSendOtp = () => {
         if (!/^\d{10}$/.test(mobileNumber)) {
             setError('Please enter a valid 10-digit mobile number.');
@@ -71,7 +72,6 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, view }) => {
         }, 1500);
     };
 
-    // FIX: Removed event parameter from handler to match React Native's onPress signature.
     const handleVerifyOtp = () => {
         if (otp === generatedOtp) {
             onLogin({ mobile: mobileNumber, role: 'citizen' });
@@ -80,7 +80,6 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, view }) => {
         }
     };
 
-    // FIX: Removed event parameter from handler to match React Native's onPress signature.
     const handlePasswordLogin = async () => {
         setError('');
         if (!username || !password) {
@@ -99,7 +98,6 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, view }) => {
         }
     };
 
-    // FIX: Removed event parameter from handler to match React Native's onPress signature.
     const handleRegister = async () => {
         setError('');
         if (!username || !password) {
@@ -118,7 +116,6 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, view }) => {
         }
     };
 
-    // FIX: Removed event parameter from handler to match React Native's onPress signature.
     const handlePoliceRegister = async () => {
         setError('');
         if (!policeName || !policeDesignation || !policeBadgeNumber || !policePhoneNumber) {
@@ -142,7 +139,6 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, view }) => {
         }
     };
 
-    // FIX: Removed event parameter from handler to match React Native's onPress signature.
     const handlePoliceBadgeLogin = async () => {
         setError('');
         if (!policeBadgeNumber) {
@@ -161,6 +157,23 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, view }) => {
             setIsLoading(false);
         }
     };
+   const handleFirefighterLogin = async () => {
+    setError('');
+    if (!firefighterUnitNumber) {
+        setError('Please enter your unit number.');
+        return;
+    }
+    // For demo purposes, we'll auto-register if not found.
+    setIsLoading(true);
+    try {
+        const firefighter = await backendService.loginOrRegisterFirefighter(firefighterUnitNumber);
+        onLogin({ mobile: firefighter.unitNumber, role: 'firefighter' });
+    } catch (err) {
+        setError(err instanceof Error ? err.message : 'An unknown error occurred.');
+    } finally {
+        setIsLoading(false);
+    }
+  };
 
     const handleBack = () => {
         setError('');
@@ -182,7 +195,14 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, view }) => {
             >
                 <SirenIcon width={64} height={64} color="#e2e8f0" />
                 <Text style={[styles.roleButtonText, { color: '#e2e8f0' }]}>I am a Police Officer</Text>
-            </TouchableOpacity>
+        </TouchableOpacity>
+        <TouchableOpacity
+            style={[styles.roleButton, styles.firefighterButton]}
+            onPress={() => { router.push('/?view=firefighterLogin'); setError(''); }}
+        >
+             <FireExtinguisherIcon width={64} height={64} color="#e2e8f0" />
+             <Text style={[styles.roleButtonText, {color: '#e2e8f0'}]}>I am a Firefighter</Text>
+        </TouchableOpacity>
         </View>
     );
 
@@ -327,17 +347,45 @@ const LoginView: React.FC<LoginViewProps> = ({ onLogin, view }) => {
             {error && <Text style={styles.errorText}>{error}</Text>}
         </View>
     );
+  const renderFirefighterLogin = () => (
+    <View>
+        <Text style={styles.titleSmall}>Fire Department Login</Text>
+        <View style={styles.buttonGroup}>
+            <TextInput 
+                style={styles.input} 
+                placeholder="Unit Number" 
+                placeholderTextColor="#64748b" 
+                value={firefighterUnitNumber} 
+                onChangeText={setFirefighterUnitNumber} 
+                autoCapitalize="none"
+                keyboardType="phone-pad"                
+            />
+            <TouchableOpacity
+                style={[styles.buttonFire, isLoading && styles.buttonDisabled]}
+                onPress={handleFirefighterLogin}
+                disabled={isLoading}
+            >
+                {isLoading ? <ActivityIndicator color="#fff" /> : <Text style={styles.buttonText}>Login / Register Unit</Text>}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={handleBack} style={styles.backButton}>
+                <Text style={styles.backButtonText}>Back to Role Selection</Text>
+            </TouchableOpacity>
+        </View>
+        {error && <Text style={styles.errorText}>{error}</Text>}
+    </View>
+  );
 
-    const renderContent = () => {
-        switch (view) {
-            case 'citizenLoginMethod': return renderCitizenLoginMethodSelection();
-            case 'mobileInput': return renderMobileInput();
-            case 'otpInput': return renderOtpInput();
-            case 'passwordLogin': return renderPasswordLogin();
-            case 'policeLogin': return renderPoliceLogin();
-            case 'role': default: return renderRoleSelection();
-        }
+  const renderContent = () => {
+    switch(view) {
+        case 'citizenLoginMethod': return renderCitizenLoginMethodSelection();
+        case 'mobileInput': return renderMobileInput();
+        case 'otpInput': return renderOtpInput();
+        case 'passwordLogin': return renderPasswordLogin();
+        case 'policeLogin': return renderPoliceLogin();
+        case 'firefighterLogin': return renderFirefighterLogin();
+        case 'role': default: return renderRoleSelection();
     }
+  }
 
     return (
         <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={{ flex: 1 }}>
@@ -437,6 +485,9 @@ const styles = StyleSheet.create({
     policeButton: {
         backgroundColor: '#334155',
     },
+    firefighterButton: {
+        backgroundColor: '#b91c1c',
+    },
     roleButtonText: {
         fontSize: 20,
         fontWeight: 'bold',
@@ -462,6 +513,12 @@ const styles = StyleSheet.create({
         alignItems: 'center',
         borderWidth: 1,
         borderColor: '#475569',
+    },
+    buttonFire: {
+        backgroundColor: '#dc2626',
+        padding: 14,
+        borderRadius: 8,
+        alignItems: 'center',
     },
     buttonDisabled: {
         backgroundColor: '#475569',

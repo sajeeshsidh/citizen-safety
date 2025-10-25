@@ -160,6 +160,8 @@ const CitizenView: React.FC<CitizenViewProps> = ({ currentUser, alerts, setAlert
         }
 
         setIsSending(true);
+        setIsRecording(false); // Stop animation immediately
+
         try {
             await audioRecorder.stop();
             setAudioModeAsync({
@@ -363,12 +365,12 @@ const CitizenView: React.FC<CitizenViewProps> = ({ currentUser, alerts, setAlert
                         value={message}
                         onChangeText={setMessage}
                         multiline
-                        editable={!isRecording}
+                        editable={!isRecording && !isSending}
                     />
                     <TouchableOpacity
-                        style={[styles.buttonAlert, (!message.trim() || isRecording) && styles.buttonDisabled]}
+                        style={[styles.buttonAlert, (!message.trim() || isRecording || isSending) && styles.buttonDisabled]}
                         onPress={handleSendTextAlert}
-                        disabled={!message.trim() || isRecording}
+                        disabled={!message.trim() || isRecording || isSending}
                     >
                         <SirenIcon width={20} height={20} color="#fff" />
                         <Text style={styles.buttonText}>SEND TEXT ALERT</Text>
@@ -523,6 +525,7 @@ const styles = StyleSheet.create({
     },
     buttonDisabled: {
         backgroundColor: '#475569',
+        opacity: 0.6,
     },
     orDivider: {
         flexDirection: 'row',

@@ -4,8 +4,8 @@ import * as backendApi from './backend';
 // Use __DEV__ global variable (provided by React Native) to determine the environment.
 const IS_DEV = __DEV__;
 
-const PROD_WS_URL = 'wss://citizen-safety-server.onrender.com';
-const DEV_WS_URL = 'http://192.168.1.6:3001/api';
+const PROD_WS_URL = 'wss://websocket-service-0ba7.onrender.com';
+const DEV_WS_URL = 'wss://websocket-service-0ba7.onrender.com';
 
 const WS_URL = IS_DEV ? DEV_WS_URL : PROD_WS_URL;
 
@@ -27,6 +27,7 @@ class BackendService {
     loginCitizen = backendApi.loginCitizen;
     registerPolice = backendApi.registerPolice;
     loginPolice = backendApi.loginPolice;
+    loginOrRegisterFirefighter = backendApi.loginOrRegisterFirefighter;
     updatePolicePushToken = backendApi.updatePolicePushToken;
     updatePoliceLocation = backendApi.updatePoliceLocation;
     fetchPoliceLocations = backendApi.fetchPoliceLocations;

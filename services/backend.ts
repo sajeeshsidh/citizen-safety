@@ -4,13 +4,13 @@
 // NOTE: This file makes network requests to a real backend server.
 // Ensure the server is running (see README.md).
 
-import { Alert, Location, PoliceOfficer } from '../types';
+import { Alert, Location, PoliceOfficer, Firefighter } from '../types';
 
 // Use __DEV__ global variable (provided by React Native) to determine the environment.
 const IS_DEV = __DEV__;
 
-const PROD_API_BASE_URL = 'https://citizen-safety-server.onrender.com/api';
-const DEV_API_BASE_URL = 'http://192.168.1.6:3001/api';
+const PROD_API_BASE_URL = 'https://citizen-safety-api-gateway.onrender.com/api';
+const DEV_API_BASE_URL = 'https://citizen-safety-api-gateway.onrender.com/api';
 
 const API_BASE_URL = IS_DEV ? DEV_API_BASE_URL : PROD_API_BASE_URL;
 
@@ -25,6 +25,10 @@ interface StoredPoliceUser {
     designation: string;
     badgeNumber: string;
     phoneNumber: string;
+}
+
+interface StoredFirefighter {
+    unitNumber: string;
 }
 
 type NewAlertData = Partial<Omit<Alert, 'id' | 'timestamp' | 'status' | 'acceptedBy'>> & {
@@ -97,6 +101,21 @@ export const loginPolice = async (badgeNumber: string): Promise<StoredPoliceUser
     });
     return handleResponse(response);
 };
+
+// --- Firefighter API ---
+
+/**
+ * Logs in or registers a firefighter by their unit number.
+ */
+export const loginOrRegisterFirefighter = async (unitNumber: string): Promise<StoredFirefighter> => {
+    const response = await fetch(`${API_BASE_URL}/firefighter/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ unitNumber }),
+    });
+    return handleResponse(response);
+};
+
 
 /**
  * Updates the push notification token for a police officer.

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, createContext, useContext, ReactNode } from 'react';
 import { Alert as RNAlert } from 'react-native';
+import * as Location from 'expo-location';
 import { User, Alert } from '../types';
 import { backendService } from '../services/BackendService';
 
@@ -7,6 +8,8 @@ import { backendService } from '../services/BackendService';
 interface GlobalContextType {
     currentUser: User | null;
     alerts: Alert[];
+    location: Location.LocationObjectCoords | null;
+    locationError: string | null;
     login: (user: User) => void;
     logout: () => void;
     setAlerts: React.Dispatch<React.SetStateAction<Alert[]>>;
@@ -28,7 +31,12 @@ export const useGlobalContext = () => {
 export const GlobalProvider = ({ children }: { children: ReactNode }) => {
     const [currentUser, setCurrentUser] = useState<User | null>(null);
     const [alerts, setAlerts] = useState<Alert[]>([]);
+    const [location, setLocation] = useState<Location.LocationObjectCoords | null>(null);
+    const [locationError, setLocationError] = useState<string | null>(null);
+    
     const alertsRef = useRef<Alert[]>([]);
+    const locationSubscription = useRef<Location.LocationSubscription | null>(null);
+
 
     useEffect(() => {
         alertsRef.current = alerts;
@@ -49,23 +57,79 @@ export const GlobalProvider = ({ children }: { children: ReactNode }) => {
         RNAlert.alert(title, body);
     };
 
-    const login = async (user: User) => {
-        console.log('provider: fetch Alerts');
-        // Immediately fetch the initial state to avoid a delay from the WebSocket connection.
-        try {
-            const initialAlerts: Alert[] = await backendService.fetchAlerts();
-            setAlerts(initialAlerts);
-        } catch (error) {
-            console.error("Failed to fetch initial alerts on login:", error);
-            RNAlert.alert("Error", "Could not load initial data. Check your network connection.");
+    const startCitizenLocationTracking = async () => {
+        if (locationSubscription.current) {
+            locationSubscription.current.remove();
+            locationSubscription.current = null;
         }
-        console.log('provider: authenticate');
-        // Authenticate the user with the WebSocket service for real-time updates.
+
+        const MOCK_LOCATION: Location.LocationObjectCoords = { latitude: 34.0522, longitude: -118.2437, accuracy: 5, altitude: null, heading: null, speed: null, altitudeAccuracy: null };
+        const MOCK_ERROR_MESSAGE = "Using a default location for demonstration.";
+
+        let { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted') {
+            setLocationError('Permission to access location was denied.');
+            setLocation(MOCK_LOCATION);
+            return;
+        }
+
+        try {
+            const position = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+            setLocation(position.coords);
+            setLocationError(null);
+
+            locationSubscription.current = await Location.watchPositionAsync(
+                { accuracy: Location.Accuracy.High, distanceInterval: 10 },
+                (newPosition) => {
+                    setLocation(newPosition.coords);
+                    setLocationError(null);
+                }
+            );
+        } catch (error) {
+            console.warn("Error getting/watching location: ", error);
+            setLocationError(`Could not get your location. ${MOCK_ERROR_MESSAGE}`);
+            setLocation(MOCK_LOCATION);
+        }
+    };
+    
+    const stopCitizenLocationTracking = () => {
+        if (locationSubscription.current) {
+            locationSubscription.current.remove();
+            locationSubscription.current = null;
+        }
+        setLocation(null);
+        setLocationError(null);
+    };
+
+    const login = (user: User) => {
+        console.log('provider: authenticating user and changing view');
+        // Set the current user immediately to trigger navigation and UI changes.
         setCurrentUser(user);
         backendService.authenticate(user);
+
+        if (user.role === 'citizen') {
+            startCitizenLocationTracking();
+        }
+
+        // Fetch initial data in the background after login.
+        const fetchInitialData = async () => {
+             console.log('provider: fetching initial alerts');
+            try {
+                const initialAlerts: Alert[] = await backendService.fetchAlerts();
+                setAlerts(initialAlerts);
+            } catch (error) {
+                console.error("Failed to fetch initial alerts on login:", error);
+                RNAlert.alert("Failed to fetch initial alerts", "Couldn't load initial data. Check your network connection.");
+            }
+        };
+
+        fetchInitialData();
     };
 
     const logout = () => {
+        if (currentUser?.role === 'citizen') {
+            stopCitizenLocationTracking();
+        }
         // Deauthenticate the user, but don't stop the service.
         backendService.deauthenticate();
         setCurrentUser(null);
@@ -75,6 +139,8 @@ export const GlobalProvider = ({ children }: { children: ReactNode }) => {
     const value = {
         currentUser,
         alerts,
+        location,
+        locationError,
         login,
         logout,
         setAlerts,
