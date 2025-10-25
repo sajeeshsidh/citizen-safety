@@ -28,6 +28,8 @@ class BackendService {
     registerPolice = backendApi.registerPolice;
     loginPolice = backendApi.loginPolice;
     loginOrRegisterFirefighter = backendApi.loginOrRegisterFirefighter;
+    updateFirefighterPushToken = backendApi.updateFirefighterPushToken;
+    updateFirefighterLocation = backendApi.updateFirefighterLocation;
     updatePolicePushToken = backendApi.updatePolicePushToken;
     updatePoliceLocation = backendApi.updatePoliceLocation;
     fetchPoliceLocations = backendApi.fetchPoliceLocations;

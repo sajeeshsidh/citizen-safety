@@ -1,97 +1,299 @@
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { View, Text, TouchableOpacity, StyleSheet, ScrollView, Platform, Alert as RNAlert } from 'react-native';
+import * as Location from 'expo-location';
+import * as Notifications from 'expo-notifications';
+import * as Device from 'expo-device';
 import { User, Alert } from '../types';
+import { backendService }  from '../services/BackendService';
+import AlertCard from './AlertCard';
+import FirefighterHistoryCard from './FirefighterHistoryCard';
+import FirefighterAlertDetails from './FirefighterAlertDetails';
+import FullScreenMapView from './FullScreenMapView';
 import FireExtinguisherIcon from './icons/FireExtinguisherIcon';
+import { useRouter } from 'expo-router';
 
 interface FirefighterViewProps {
-  currentUser: User;
-  alerts: Alert[];
+    currentUser: User;
+    alerts: Alert[];
+    setAlerts: React.Dispatch<React.SetStateAction<Alert[]>>;
+    view: 'live' | 'history';
 }
 
-const FirefighterView: React.FC<FirefighterViewProps> = ({ currentUser, alerts }) => {
-  const fireAlerts = alerts.filter(
-    (alert) => alert.category === 'Fire & Rescue' && alert.status !== 'resolved'
-  );
+async function registerForPushNotificationsAsync(unitNumber: string) {
+    try {
+        if (!Device.isDevice) {
+            RNAlert.alert('Push Notification Info', 'Push notifications require a physical device and will not be enabled on simulators or emulators.');
+            return null;
+        }
 
-  return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <View style={styles.header}>
-        <FireExtinguisherIcon width={32} height={32} color="#f87171" />
-        <Text style={styles.title}>Fire & Rescue Dispatch</Text>
-      </View>
-      <Text style={styles.subtitle}>
-        Viewing alerts for Unit #{currentUser.mobile}
-      </Text>
+        const { status: existingStatus } = await Notifications.getPermissionsAsync();
+        let finalStatus = existingStatus;
+        if (existingStatus !== 'granted') {
+            const { status } = await Notifications.requestPermissionsAsync();
+            finalStatus = status;
+        }
+        if (finalStatus !== 'granted') {
+            RNAlert.alert('Permission Denied', 'Failed to get permission for push notifications. You will not receive alerts when the app is closed.');
+            return null;
+        }
 
-      {fireAlerts.length === 0 ? (
-        <Text style={styles.emptyText}>No active fire-related alerts.</Text>
-      ) : (
-        fireAlerts.map((alert) => (
-          <View key={alert.id} style={styles.card}>
-            <Text style={styles.cardTitle}>Alert #{alert.id}</Text>
-            <Text style={styles.cardText}>{alert.message || 'Voice Alert'}</Text>
-             <View style={styles.status}>
-                <Text style={styles.statusText}>STATUS: {alert.status.toUpperCase()}</Text>
-            </View>
-          </View>
-        ))
-      )}
-    </ScrollView>
-  );
+        const token = (await Notifications.getExpoPushTokenAsync()).data;
+        console.log("Expo Push Token:", token);
+
+        // Send the token to your backend for the firefighter
+        await backendService.updateFirefighterPushToken(unitNumber, token);
+        console.log(`Successfully sent push token for unit ${unitNumber} to server.`);
+
+        if (Platform.OS === 'android') {
+            await Notifications.setNotificationChannelAsync('default', {
+                name: 'default',
+                importance: Notifications.AndroidImportance.MAX,
+                vibrationPattern: [0, 250, 250, 250],
+                lightColor: '#FF231F7C',
+            });
+        }
+
+        return token;
+    } catch (error: any) {
+        console.error("Error during push notification registration:", error);
+        RNAlert.alert('Push Notification Error', `An error occurred while registering for push notifications: ${error.message}`);
+        return null;
+    }
+}
+
+const FirefighterView: React.FC<FirefighterViewProps> = ({ currentUser, alerts, setAlerts, view }) => {
+    const router = useRouter();
+    const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [fullScreenMapAlert, setFullScreenMapAlert] = useState<Alert | null>(null);
+    const locationSubscription = useRef<Location.LocationSubscription | null>(null);
+
+    const myUnitNumber = currentUser.mobile;
+
+    const { newAlerts, myActiveAlerts, historyAlerts } = useMemo(() => {
+        const newAlerts: Alert[] = [];
+        const myActiveAlerts: Alert[] = [];
+        const historyAlerts: Alert[] = [];
+
+        alerts.forEach(alert => {
+            if (alert.category !== 'Fire & Rescue') return;
+
+            if (alert.status === 'new' && alert.targetedOfficers?.includes(myUnitNumber)) {
+                newAlerts.push(alert);
+            } else if (alert.status === 'accepted' && alert.acceptedBy === myUnitNumber) {
+                myActiveAlerts.push(alert);
+            } else if (['resolved', 'canceled', 'timed_out'].includes(alert.status)) {
+                historyAlerts.push(alert);
+            }
+        });
+
+        historyAlerts.sort((a, b) => b.timestamp - a.timestamp);
+        return { newAlerts, myActiveAlerts, historyAlerts };
+    }, [alerts, myUnitNumber]);
+    
+    useEffect(() => {
+        const currentList = view === 'live' ? [...myActiveAlerts, ...newAlerts] : historyAlerts;
+        const selectionIsValid = selectedAlert && currentList.some(a => a.id === selectedAlert.id);
+
+        if (!selectionIsValid) {
+            setSelectedAlert(currentList[0] || null);
+        }
+    }, [view, newAlerts, myActiveAlerts, historyAlerts, selectedAlert]);
+
+    useEffect(() => {
+        registerForPushNotificationsAsync(myUnitNumber);
+
+        const startLocationTracking = async () => {
+            let { status } = await Location.requestForegroundPermissionsAsync();
+            if (status !== 'granted') {
+                console.error("Location permission denied for firefighter.");
+                return;
+            }
+
+            locationSubscription.current = await Location.watchPositionAsync(
+                {
+                    accuracy: Location.Accuracy.High,
+                    distanceInterval: 10,
+                },
+                (position) => {
+                    const newLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
+                    backendService.updateFirefighterLocation(myUnitNumber, newLocation).catch(err => console.error("Failed to update location:", err));
+                }
+            );
+        };
+
+        startLocationTracking();
+
+        return () => {
+            locationSubscription.current?.remove();
+        };
+    }, [myUnitNumber]);
+
+    const handleAcceptAlert = async (alertId: number) => {
+        setIsProcessing(true);
+        try {
+            const updatedAlert = await backendService.acceptAlert(alertId, myUnitNumber);
+            setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, ...updatedAlert } : a));
+            setSelectedAlert(prev => prev && prev.id === alertId ? { ...prev, ...updatedAlert } : prev);
+        } catch (error) {
+            console.error("Failed to accept alert:", error);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleResolveAlert = async (alertId: number) => {
+        setIsProcessing(true);
+        try {
+            const updatedAlert = await backendService.resolveAlert(alertId);
+            setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, ...updatedAlert } : a));
+        } catch (error) {
+            console.error("Failed to resolve alert:", error);
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    const handleDeleteFromHistory = async (alertId: number) => {
+        try {
+            await backendService.deleteAlert(alertId);
+            setAlerts(prev => prev.filter(a => a.id !== alertId));
+        } catch (error) {
+            console.error("Failed to delete alert:", error);
+        }
+    };
+
+    const renderAlertList = (title: string, alertsToList: Alert[], CardComponent: any, emptyMessage: string, isHistory = false) => (
+        <View style={styles.listContainer}>
+            <Text style={styles.listTitle}>{title}</Text>
+            {alertsToList.length === 0 ? (
+                <Text style={styles.emptyText}>{emptyMessage}</Text>
+            ) : (
+                alertsToList.map(alert => {
+                    const isSelected = selectedAlert?.id === alert.id;
+                    return (
+                        <View key={alert.id} style={{ marginBottom: 8 }}>
+                            <CardComponent
+                                alert={alert}
+                                onClick={() => setSelectedAlert(current => (current?.id === alert.id ? null : alert))}
+                                isSelected={isSelected}
+                                onDelete={isHistory ? handleDeleteFromHistory : undefined}
+                                isActive={myActiveAlerts.some(a => a.id === alert.id)}
+                            />
+                            {isSelected && (
+                                <FirefighterAlertDetails
+                                    alert={alert}
+                                    isMyActive={myActiveAlerts.some(a => a.id === alert.id)}
+                                    isProcessing={isProcessing}
+                                    onAccept={handleAcceptAlert}
+                                    onResolve={handleResolveAlert}
+                                    onMapClick={() => setFullScreenMapAlert(alert)}
+                                />
+                            )}
+                        </View>
+                    )
+                })
+            )}
+        </View>
+    );
+
+    return (
+        <View style={{ flex: 1 }}>
+            <ScrollView contentContainerStyle={styles.container}>
+                <View style={styles.header}>
+                    <FireExtinguisherIcon width={32} height={32} color="#f87171" />
+                    <Text style={styles.title}>Fire & Rescue Dispatch</Text>
+                </View>
+
+                 <View style={styles.toggleButtons}>
+                    <TouchableOpacity
+                        style={[styles.toggleButton, view === 'live' && styles.toggleButtonActive]}
+                        onPress={() => router.replace('/firefighter')}
+                    >
+                        <Text style={[styles.toggleButtonText, view === 'live' && styles.toggleButtonTextActive]}>
+                            Live Alerts ({newAlerts.length + myActiveAlerts.length})
+                        </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                        style={[styles.toggleButton, view === 'history' && styles.toggleButtonActive]}
+                        onPress={() => router.replace('/firefighter?view=history')}
+                    >
+                        <Text style={[styles.toggleButtonText, view === 'history' && styles.toggleButtonTextActive]}>
+                            History ({historyAlerts.length})
+                        </Text>
+                    </TouchableOpacity>
+                </View>
+
+                {view === 'live' ? (
+                    <View style={{ gap: 24 }}>
+                        {renderAlertList("My Active Response", myActiveAlerts, FirefighterHistoryCard, "You have no active responses.")}
+                        {renderAlertList("New Incoming Alerts", newAlerts, AlertCard, "No new fire-related alerts.")}
+                    </View>
+                ) : (
+                    renderAlertList("Alert History", historyAlerts, FirefighterHistoryCard, "History is empty.", true)
+                )}
+            </ScrollView>
+            {fullScreenMapAlert && (
+                <FullScreenMapView
+                    alert={fullScreenMapAlert}
+                    onClose={() => setFullScreenMapAlert(null)}
+                />
+            )}
+        </View>
+    );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    padding: 16,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#f1f5f9',
-    marginLeft: 12,
-  },
-  subtitle: {
-    color: '#94a3b8',
-    marginBottom: 24,
-  },
-  card: {
-    backgroundColor: '#1e293b',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#334155',
-    padding: 16,
-    marginBottom: 12,
-  },
-  cardTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#f87171',
-    marginBottom: 8,
-  },
-  cardText: {
-    color: '#e2e8f0',
-    marginBottom: 12,
-  },
-  status: {
-    borderTopWidth: 1,
-    borderTopColor: '#334155',
-    paddingTop: 8,
-    marginTop: 8,
-  },
-  statusText: {
-    color: '#facc15',
-    fontWeight: 'bold',
-  },
-  emptyText: {
-    color: '#64748b',
-    textAlign: 'center',
-    marginTop: 48,
-  },
+    container: {
+        padding: 16,
+    },
+    header: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 16,
+    },
+    title: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: '#f1f5f9',
+        marginLeft: 12,
+    },
+    toggleButtons: {
+        flexDirection: 'row',
+        marginBottom: 16,
+        gap: 8,
+    },
+    toggleButton: {
+        flex: 1,
+        paddingVertical: 12,
+        borderRadius: 8,
+        backgroundColor: '#1e293b',
+    },
+    toggleButtonActive: {
+        backgroundColor: '#dc2626',
+    },
+    toggleButtonText: {
+        color: '#cbd5e1',
+        fontWeight: 'bold',
+        textAlign: 'center',
+    },
+    toggleButtonTextActive: {
+        color: '#fff',
+    },
+    listContainer: {
+        // styles for the list sections
+    },
+    listTitle: {
+        fontSize: 18,
+        fontWeight: '600',
+        color: '#cbd5e1',
+        marginBottom: 8,
+    },
+    emptyText: {
+        color: '#64748b',
+        textAlign: 'center',
+        paddingVertical: 32,
+    },
 });
 
 export default FirefighterView;

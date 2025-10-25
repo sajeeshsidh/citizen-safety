@@ -4,7 +4,7 @@
 // NOTE: This file makes network requests to a real backend server.
 // Ensure the server is running (see README.md).
 
-import { Alert, Location, PoliceOfficer, Firefighter } from '../types';
+import { Alert, Location, PoliceOfficer } from '../types';
 
 // Use __DEV__ global variable (provided by React Native) to determine the environment.
 const IS_DEV = __DEV__;
@@ -116,6 +116,29 @@ export const loginOrRegisterFirefighter = async (unitNumber: string): Promise<St
     return handleResponse(response);
 };
 
+/**
+ * Updates the push notification token for a firefighter.
+ */
+export const updateFirefighterPushToken = async (unitNumber: string, token: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/firefighter/pushtoken`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ unitNumber, token }),
+    });
+    await handleResponse(response);
+};
+
+/**
+ * Updates the location for a given firefighter.
+ */
+export const updateFirefighterLocation = async (unitNumber: string, location: Location): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/firefighter/location`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ unitNumber, location }),
+    });
+    await handleResponse(response);
+}
 
 /**
  * Updates the push notification token for a police officer.
