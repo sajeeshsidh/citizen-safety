@@ -1,5 +1,6 @@
 import { User, Alert } from '../types';
 import * as backendApi from './backend';
+import * as ngeohash from 'ngeohash';
 
 // Use __DEV__ global variable (provided by React Native) to determine the environment.
 const IS_DEV = __DEV__;
@@ -13,6 +14,7 @@ interface ServiceCallbacks {
     onAlertsUpdate: (alerts: Alert[]) => void;
     onNotification: (title: string, body: string) => void;
     getPreviousAlerts: () => Alert[];
+    setAlerts: React.Dispatch<React.SetStateAction<Alert[]>>;
 }
 
 class BackendService {
@@ -21,6 +23,8 @@ class BackendService {
     private callbacks: ServiceCallbacks | null = null;
     private isConnecting = false;
     private reconnectTimeoutId: number | undefined;
+    private currentSubscriptions = new Set<string>();
+    private setAlerts: React.Dispatch<React.SetStateAction<Alert[]>> | null = null;
 
     // --- API Methods (pass-through to the api client) ---
     registerCitizen = backendApi.registerCitizen;
@@ -50,6 +54,7 @@ class BackendService {
         console.log("BackendService initializing...");
         this.callbacks = callbacks;
         this.startWebSocketConnection();
+        this.setAlerts = callbacks.setAlerts;
     }
 
     /**
@@ -73,6 +78,36 @@ class BackendService {
     deauthenticate() {
         console.log("BackendService deauthenticating.");
         this.currentUser = null;
+        this.updateSubscriptions(null);
+    }
+
+    updateSubscriptions(location: Location | null) {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            return; // Cannot update subscriptions if not connected.
+        }
+
+        let newTopics = new Set<string>();
+        if (location) {
+            // Precision 7 is a grid of approx. 153m x 153m
+            const center = ngeohash.encode(location.lat, location.lng, 7);
+            const neighbors = ngeohash.neighbors(center);
+            newTopics.add(`geo:${center}`);
+            neighbors.forEach(n => newTopics.add(`geo:${n}`));
+        }
+        
+        const toUnsubscribe = [...this.currentSubscriptions].filter(x => !newTopics.has(x));
+        const toSubscribe = [...newTopics].filter(x => !this.currentSubscriptions.has(x));
+
+        if (toUnsubscribe.length > 0) {
+            this.ws.send(JSON.stringify({ type: 'unsubscribe', payload: { topics: toUnsubscribe } }));
+            console.log(`[WS] Unsubscribing from topics:`, toUnsubscribe);
+        }
+        if (toSubscribe.length > 0) {
+            this.ws.send(JSON.stringify({ type: 'subscribe', payload: { topics: toSubscribe } }));
+            console.log(`[WS] Subscribing to topics:`, toSubscribe);
+        }
+
+        this.currentSubscriptions = newTopics;
     }
 
     /**
@@ -86,9 +121,7 @@ class BackendService {
     }
 
     private startWebSocketConnection() {
-        if (this.ws || this.isConnecting) {
-            return;
-        }
+        if (this.ws || this.isConnecting) return;
 
         this.isConnecting = true;
         console.log('Attempting to open WebSocket connection...');
@@ -97,19 +130,39 @@ class BackendService {
         this.ws.onopen = () => {
             console.log('WebSocket connection opened.');
             this.isConnecting = false;
-            if (this.reconnectTimeoutId) {
-                clearTimeout(this.reconnectTimeoutId);
-                this.reconnectTimeoutId = undefined;
-            }
+
+            clearTimeout(this.reconnectTimeoutId);
+            this.reconnectTimeoutId = undefined;
+
             // If a user logged in while the socket was down, authenticate now.
             this.sendAuthentication();
         };
 
         this.ws.onmessage = (event) => {
+            if (!this.setAlerts) return;
             try {
                 const message = JSON.parse(event.data);
-                if (message.type === 'alerts') {
-                    this.handleAlertsUpdate(message.payload);
+                switch(message.type) {
+                    case 'initial_alerts':
+                        console.log(`[WS] Received ${message.payload.length} initial alerts for subscribed area.`);
+                        this.setAlerts(message.payload);
+                        break;
+                    case 'alert_created':
+                        console.log(`[WS] Received new alert #${message.payload.id}.`);
+                        this.setAlerts(prev => [message.payload, ...prev.filter(a => a.id !== message.payload.id)]);
+                        this.handleNotificationForNewAlert(message.payload);
+                        break;
+                    case 'alert_updated':
+                        console.log(`[WS] Received update for alert #${message.payload.id}.`);
+                        this.setAlerts(prev => prev.map(a => a.id === message.payload.id ? message.payload : a));
+                        this.handleNotificationForUpdatedAlert(message.payload);
+                        break;
+                    case 'alert_deleted':
+                         console.log(`[WS] Received delete for alert #${message.payload.id}.`);
+                        this.setAlerts(prev => prev.filter(a => a.id !== message.payload.id));
+                        break;
+                    default:
+                        console.warn(`[WS] Received unknown message type: ${message.type}`);
                 }
             } catch (error) {
                 console.error('Error parsing WebSocket message:', error);
@@ -132,6 +185,26 @@ class BackendService {
             console.error("WebSocket error:", (error as any).message);
             this.isConnecting = false;
         };
+    }
+
+    private handleNotificationForNewAlert(newAlert: Alert) {
+        if (!this.callbacks || !this.currentUser || this.currentUser.role === 'citizen') return;
+
+        // Notify police/firefighters about a new alert they are targeted for.
+        if (newAlert.status === 'new' && newAlert.targetedOfficers?.includes(this.currentUser.mobile)) {
+             this.callbacks.onNotification('New Incoming Alert!', newAlert.message || 'A new voice alert has been received.');
+        }
+        this.callbacks.onAlertsUpdate(newAlert);
+    }
+    
+    private handleNotificationForUpdatedAlert(updatedAlert: Alert) {
+        if (!this.callbacks || !this.currentUser || this.currentUser.role !== 'citizen') return;
+
+        // Notify a citizen that their alert was accepted.
+        if (updatedAlert.citizenId === this.currentUser.mobile && updatedAlert.status === 'accepted') {
+            this.callbacks.onNotification('An Officer is Responding!', `Help is on the way. Officer #${updatedAlert.acceptedBy} is en route.`);
+        }
+        this.callbacks.onAlertsUpdate(updatedAlert);
     }
 
     private handleAlertsUpdate(newAlerts: Alert[]) {

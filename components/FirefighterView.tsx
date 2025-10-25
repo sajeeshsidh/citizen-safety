@@ -110,6 +110,12 @@ const FirefighterView: React.FC<FirefighterViewProps> = ({ currentUser, alerts, 
                 return;
             }
 
+
+            // Get initial location for immediate subscription
+            const initialPosition = await Location.getCurrentPositionAsync({});
+            const initialLocation = { lat: initialPosition.coords.latitude, lng: initialPosition.coords.longitude };
+            backendService.updateSubscriptions(initialLocation);
+
             locationSubscription.current = await Location.watchPositionAsync(
                 {
                     accuracy: Location.Accuracy.High,
@@ -118,6 +124,7 @@ const FirefighterView: React.FC<FirefighterViewProps> = ({ currentUser, alerts, 
                 (position) => {
                     const newLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
                     backendService.updateFirefighterLocation(myUnitNumber, newLocation).catch(err => console.error("Failed to update location:", err));
+                    backendService.updateSubscriptions(newLocation);
                 }
             );
         };
@@ -126,17 +133,17 @@ const FirefighterView: React.FC<FirefighterViewProps> = ({ currentUser, alerts, 
 
         return () => {
             locationSubscription.current?.remove();
+            backendService.updateSubscriptions(null); // Unsubscribe on logout/unmount
         };
     }, [myUnitNumber]);
 
     const handleAcceptAlert = async (alertId: number) => {
         setIsProcessing(true);
         try {
-            const updatedAlert = await backendService.acceptAlert(alertId, myUnitNumber);
-            setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, ...updatedAlert } : a));
-            setSelectedAlert(prev => prev && prev.id === alertId ? { ...prev, ...updatedAlert } : prev);
+            await backendService.acceptAlert(alertId, myUnitNumber);
         } catch (error) {
             console.error("Failed to accept alert:", error);
+            RNAlert.alert("Error", "Failed to accept the alert. Please try again.");
         } finally {
             setIsProcessing(false);
         }
@@ -145,10 +152,10 @@ const FirefighterView: React.FC<FirefighterViewProps> = ({ currentUser, alerts, 
     const handleResolveAlert = async (alertId: number) => {
         setIsProcessing(true);
         try {
-            const updatedAlert = await backendService.resolveAlert(alertId);
-            setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, ...updatedAlert } : a));
+            await backendService.resolveAlert(alertId);
         } catch (error) {
             console.error("Failed to resolve alert:", error);
+            RNAlert.alert("Error", "Failed to resolve the alert. Please try again.");
         } finally {
             setIsProcessing(false);
         }
@@ -157,9 +164,9 @@ const FirefighterView: React.FC<FirefighterViewProps> = ({ currentUser, alerts, 
     const handleDeleteFromHistory = async (alertId: number) => {
         try {
             await backendService.deleteAlert(alertId);
-            setAlerts(prev => prev.filter(a => a.id !== alertId));
         } catch (error) {
             console.error("Failed to delete alert:", error);
+            RNAlert.alert("Error", "Failed to delete the alert. Please try again.");
         }
     };
 

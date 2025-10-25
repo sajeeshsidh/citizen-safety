@@ -3,6 +3,7 @@ import { Alert as RNAlert } from 'react-native';
 import * as Location from 'expo-location';
 import { User, Alert } from '../types';
 import { backendService } from '../services/BackendService';
+import * as ngeohash from 'ngeohash';
 
 // Define the shape of the context state
 interface GlobalContextType {
@@ -36,7 +37,7 @@ export const GlobalProvider = ({ children }: { children: ReactNode }) => {
     
     const alertsRef = useRef<Alert[]>([]);
     const locationSubscription = useRef<Location.LocationSubscription | null>(null);
-
+    const lastGeohashRef = useRef<string | null>(null);
 
     useEffect(() => {
         alertsRef.current = alerts;
@@ -48,13 +49,28 @@ export const GlobalProvider = ({ children }: { children: ReactNode }) => {
             onAlertsUpdate: (newAlerts) => setAlerts(newAlerts),
             onNotification: showNotification,
             getPreviousAlerts: () => alertsRef.current,
+            setAlerts: setAlerts, // Pass the state setter to the service
         });
         // Per requirements, the service runs for the app's lifetime and is not cleaned up here.
     }, []);
 
+    // Effect to manage geohash subscriptions for citizens based on location changes.
+    useEffect(() => {
+        if (location && currentUser?.role === 'citizen') {
+            // Calculate the geohash for the current location (precision 7 is ~150m grid)
+            const currentGeohash = ngeohash.encode(location.latitude, location.longitude, 7);
+            // Only update subscriptions if the user has moved to a new geohash grid
+            if (currentGeohash !== lastGeohashRef.current) {
+                console.log(`Citizen moved to new geohash grid: ${currentGeohash}. Updating subscriptions.`);
+                lastGeohashRef.current = currentGeohash;
+                backendService.updateSubscriptions({ lat: location.latitude, lng: location.longitude });
+            }
+        }
+    }, [location, currentUser]);
+
     const showNotification = (title: string, body: string) => {
         console.log(`NOTIFICATION: ${title} - ${body}`);
-        RNAlert.alert(title, body);
+        //RNAlert.alert(title, body);
     };
 
     const startCitizenLocationTracking = async () => {
@@ -99,6 +115,8 @@ export const GlobalProvider = ({ children }: { children: ReactNode }) => {
         }
         setLocation(null);
         setLocationError(null);
+        backendService.updateSubscriptions(null); // Unsubscribe from geo topics
+        lastGeohashRef.current = null;
     };
 
     const login = (user: User) => {
@@ -110,20 +128,7 @@ export const GlobalProvider = ({ children }: { children: ReactNode }) => {
         if (user.role === 'citizen') {
             startCitizenLocationTracking();
         }
-
-        // Fetch initial data in the background after login.
-        const fetchInitialData = async () => {
-             console.log('provider: fetching initial alerts');
-            try {
-                const initialAlerts: Alert[] = await backendService.fetchAlerts();
-                setAlerts(initialAlerts);
-            } catch (error) {
-                console.error("Failed to fetch initial alerts on login:", error);
-                RNAlert.alert("Failed to fetch initial alerts", "Couldn't load initial data. Check your network connection.");
-            }
-        };
-
-        fetchInitialData();
+        // For police/firefighters, location tracking and subscriptions are handled in their respective views.
     };
 
     const logout = () => {
