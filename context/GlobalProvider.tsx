@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, createContext, useContext, ReactNod
 import { Alert as RNAlert } from 'react-native';
 import * as Location from 'expo-location';
 import { User, Alert } from '../types';
-import { backendService, AlertMessage } from '../services/BackendService';
+import { backendService } from '../services/BackendService';
 import * as ngeohash from 'ngeohash';
 
 // Define the shape of the context state

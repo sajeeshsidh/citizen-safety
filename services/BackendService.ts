@@ -1,4 +1,4 @@
-import { User, Alert } from '../types';
+import { User, Alert, Location } from '../types';
 import * as backendApi from './backend';
 import * as ngeohash from 'ngeohash';
 
@@ -22,7 +22,6 @@ type EventListener = (payload: any) => void;
 class BackendService {
     private ws: WebSocket | null = null;
     private currentUser: User | null = null;
-    private callbacks: ServiceCallbacks | null = null;
     private isConnecting = false;
     private reconnectTimeoutId: number | undefined;
     private currentSubscriptions = new Set<string>();
@@ -217,40 +216,6 @@ class BackendService {
                 this.emit('notification', { title: 'An Officer is Responding!', body: `Help is on the way. Officer #${updatedAlert.acceptedBy} is en route.` });
             }
         }
-    }
-
-    private handleAlertsUpdate(newAlerts: Alert[]) {
-        if (!this.callbacks || !this.currentUser) return;
-
-        const oldAlerts = this.callbacks.getPreviousAlerts();
-        const { role, mobile } = this.currentUser;
-
-        if (role === 'police') {
-            const newIncomingAlerts = newAlerts.filter(
-                (newAlert) =>
-                    newAlert.status === 'new' &&
-                    !oldAlerts.some((oldAlert) => oldAlert.id === newAlert.id)
-            );
-
-            if (newIncomingAlerts.length > 0) {
-                this.callbacks.onNotification('New Incoming Alert!', `${newIncomingAlerts.length} new emergency alert(s) received.`);
-            }
-        } else if (role === 'citizen') {
-            const justAcceptedAlert = newAlerts.find(
-                (newAlert) =>
-                    newAlert.citizenId === mobile &&
-                    newAlert.status === 'accepted' &&
-                    oldAlerts.find(
-                        (oldAlert) => oldAlert.id === newAlert.id && oldAlert.status === 'new'
-                    )
-            );
-
-            if (justAcceptedAlert) {
-                this.callbacks.onNotification('An Officer is Responding!', `Help is on the way. Officer #${justAcceptedAlert.acceptedBy} is en route.`);
-            }
-        }
-
-        this.callbacks.onAlertsUpdate(newAlerts);
     }
 }
 
