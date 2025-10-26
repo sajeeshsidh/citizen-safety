@@ -10,12 +10,14 @@ const DEV_WS_URL = 'wss://websocket-service-0ba7.onrender.com';
 
 const WS_URL = IS_DEV ? DEV_WS_URL : PROD_WS_URL;
 
-interface ServiceCallbacks {
-    onAlertsUpdate: (alerts: Alert[]) => void;
-    onNotification: (title: string, body: string) => void;
-    getPreviousAlerts: () => Alert[];
-    setAlerts: React.Dispatch<React.SetStateAction<Alert[]>>;
+export type AlertEventType = 'initial_alerts' | 'alert_created' | 'alert_updated' | 'alert_deleted' | 'notification';
+
+export interface AlertMessage {
+    type: AlertEventType;
+    payload: any;
 }
+
+type EventListener = (payload: any) => void;
 
 class BackendService {
     private ws: WebSocket | null = null;
@@ -24,7 +26,7 @@ class BackendService {
     private isConnecting = false;
     private reconnectTimeoutId: number | undefined;
     private currentSubscriptions = new Set<string>();
-    private setAlerts: React.Dispatch<React.SetStateAction<Alert[]>> | null = null;
+    private listeners: { [key in AlertEventType]?: EventListener[] } = {};
 
     // --- API Methods (pass-through to the api client) ---
     registerCitizen = backendApi.registerCitizen;
@@ -46,15 +48,41 @@ class BackendService {
     deleteAlert = backendApi.deleteAlert;
     clearAlerts = backendApi.clearAlerts;
 
+    // --- Event Emitter Implementation ---
+
+    addListener(event: AlertEventType, listener: EventListener) {
+        if (!this.listeners[event]) {
+            this.listeners[event] = [];
+        }
+        this.listeners[event]?.push(listener);
+    }
+
+    removeListener(event: AlertEventType, listenerToRemove: EventListener) {
+        if (!this.listeners[event]) return;
+        this.listeners[event] = this.listeners[event]?.filter(
+            (listener) => listener !== listenerToRemove
+        );
+    }
+    
+    private emit(event: AlertEventType, payload: any) {
+        this.listeners[event]?.forEach((listener) => {
+            try {
+                listener(payload);
+            } catch (error) {
+                console.error(`Error in listener for event ${event}:`, error);
+            }
+        });
+    }
+
+    // --- Core Service Logic ---
+
     /**
      * Initializes the service and its callbacks. Called once on app startup.
      * It immediately attempts to establish a WebSocket connection.
      */
-    init(callbacks: ServiceCallbacks) {
+    init() {
         console.log("BackendService initializing...");
-        this.callbacks = callbacks;
         this.startWebSocketConnection();
-        this.setAlerts = callbacks.setAlerts;
     }
 
     /**
@@ -88,8 +116,8 @@ class BackendService {
 
         let newTopics = new Set<string>();
         if (location) {
-            // Precision 7 is a grid of approx. 153m x 153m
-            const center = ngeohash.encode(location.lat, location.lng, 7);
+            // Precision 4 is a grid of approx. 39km x 19.5km
+            const center = ngeohash.encode(location.lat, location.lng, 4);
             const neighbors = ngeohash.neighbors(center);
             newTopics.add(`geo:${center}`);
             neighbors.forEach(n => newTopics.add(`geo:${n}`));
@@ -139,30 +167,15 @@ class BackendService {
         };
 
         this.ws.onmessage = (event) => {
-            if (!this.setAlerts) return;
             try {
                 const message = JSON.parse(event.data);
-                switch(message.type) {
-                    case 'initial_alerts':
-                        console.log(`[WS] Received ${message.payload.length} initial alerts for subscribed area.`);
-                        this.setAlerts(message.payload);
-                        break;
-                    case 'alert_created':
-                        console.log(`[WS] Received new alert #${message.payload.id}.`);
-                        this.setAlerts(prev => [message.payload, ...prev.filter(a => a.id !== message.payload.id)]);
-                        this.handleNotificationForNewAlert(message.payload);
-                        break;
-                    case 'alert_updated':
-                        console.log(`[WS] Received update for alert #${message.payload.id}.`);
-                        this.setAlerts(prev => prev.map(a => a.id === message.payload.id ? message.payload : a));
-                        this.handleNotificationForUpdatedAlert(message.payload);
-                        break;
-                    case 'alert_deleted':
-                         console.log(`[WS] Received delete for alert #${message.payload.id}.`);
-                        this.setAlerts(prev => prev.filter(a => a.id !== message.payload.id));
-                        break;
-                    default:
-                        console.warn(`[WS] Received unknown message type: ${message.type}`);
+                const { type, payload } = message;
+
+                if (type && this.listeners[type as AlertEventType]) {
+                    this.emit(type, payload);
+                    this.handleNotificationForAlerts(type, payload);
+                } else {
+                    console.warn(`[WS] Received unknown or unhandled message type: ${type}`);
                 }
             } catch (error) {
                 console.error('Error parsing WebSocket message:', error);
@@ -187,24 +200,23 @@ class BackendService {
         };
     }
 
-    private handleNotificationForNewAlert(newAlert: Alert) {
-        if (!this.callbacks || !this.currentUser || this.currentUser.role === 'citizen') return;
+    // Handles emitting local "notification" events based on incoming data.
+    private handleNotificationForAlerts(type: AlertEventType, payload: any) {
+        if (!this.currentUser) return;
 
-        // Notify police/firefighters about a new alert they are targeted for.
-        if (newAlert.status === 'new' && newAlert.targetedOfficers?.includes(this.currentUser.mobile)) {
-             this.callbacks.onNotification('New Incoming Alert!', newAlert.message || 'A new voice alert has been received.');
+        if (type === 'alert_created') {
+            const newAlert = payload as Alert;
+            // Notify police/firefighters about a new alert they are targeted for.
+            if (this.currentUser.role !== 'citizen' && newAlert.status === 'new' && newAlert.targetedOfficers?.includes(this.currentUser.mobile)) {
+                this.emit('notification', { title: 'New Incoming Alert!', body: newAlert.message || 'A new voice alert has been received.' });
+            }
+        } else if (type === 'alert_updated') {
+            const updatedAlert = payload as Alert;
+            // Notify a citizen that their alert was accepted.
+            if (this.currentUser.role === 'citizen' && updatedAlert.citizenId === this.currentUser.mobile && updatedAlert.status === 'accepted') {
+                this.emit('notification', { title: 'An Officer is Responding!', body: `Help is on the way. Officer #${updatedAlert.acceptedBy} is en route.` });
+            }
         }
-        this.callbacks.onAlertsUpdate(newAlert);
-    }
-    
-    private handleNotificationForUpdatedAlert(updatedAlert: Alert) {
-        if (!this.callbacks || !this.currentUser || this.currentUser.role !== 'citizen') return;
-
-        // Notify a citizen that their alert was accepted.
-        if (updatedAlert.citizenId === this.currentUser.mobile && updatedAlert.status === 'accepted') {
-            this.callbacks.onNotification('An Officer is Responding!', `Help is on the way. Officer #${updatedAlert.acceptedBy} is en route.`);
-        }
-        this.callbacks.onAlertsUpdate(updatedAlert);
     }
 
     private handleAlertsUpdate(newAlerts: Alert[]) {

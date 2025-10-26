@@ -39,15 +39,31 @@ type NewAlertData = Partial<Omit<Alert, 'id' | 'timestamp' | 'status' | 'accepte
 // --- API Helper Function ---
 
 const handleResponse = async (response: Response) => {
+    // Read the raw text of the response first. This prevents JSON parsing errors on empty or non-JSON bodies.
+    const responseText = await response.text();
+
     if (response.status === 204) { // No Content
         return;
     }
-    const data = await response.json();
+
     if (!response.ok) {
-        // Use the message from the backend error response
-        throw new Error(data.message || `HTTP error! status: ${response.status}`);
+        // If the server returned an error, try to parse the body for a structured message.
+        // If that fails, throw the raw text.
+        try {
+            const errorData = JSON.parse(responseText);
+            throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+        } catch (e) {
+            throw new Error(responseText || `HTTP error! status: ${response.status}`);
+        }
     }
-    return data;
+
+    // If the response was successful (2xx), it should be JSON.
+    try {
+        return JSON.parse(responseText);
+    } catch (e) {
+        console.error("Failed to parse successful response as JSON:", responseText);
+        throw new Error("Received an invalid response from the server.");
+    }
 };
 
 // --- Citizen API ---

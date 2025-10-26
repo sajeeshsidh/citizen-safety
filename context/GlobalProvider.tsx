@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, createContext, useContext, ReactNod
 import { Alert as RNAlert } from 'react-native';
 import * as Location from 'expo-location';
 import { User, Alert } from '../types';
-import { backendService } from '../services/BackendService';
+import { backendService, AlertMessage } from '../services/BackendService';
 import * as ngeohash from 'ngeohash';
 
 // Define the shape of the context state
@@ -34,31 +34,64 @@ export const GlobalProvider = ({ children }: { children: ReactNode }) => {
     const [alerts, setAlerts] = useState<Alert[]>([]);
     const [location, setLocation] = useState<Location.LocationObjectCoords | null>(null);
     const [locationError, setLocationError] = useState<string | null>(null);
-    
-    const alertsRef = useRef<Alert[]>([]);
+
     const locationSubscription = useRef<Location.LocationSubscription | null>(null);
     const lastGeohashRef = useRef<string | null>(null);
 
+    // This effect runs once on app startup to initialize the backend service
+    // and set up listeners for real-time events.
     useEffect(() => {
-        alertsRef.current = alerts;
-    }, [alerts]);
+        // Initialize the service (starts WebSocket connection)
+        backendService.init();
 
-    // Initialize the backend service once when the provider mounts (app startup).
-    useEffect(() => {
-        backendService.init({
-            onAlertsUpdate: (newAlerts) => setAlerts(newAlerts),
-            onNotification: showNotification,
-            getPreviousAlerts: () => alertsRef.current,
-            setAlerts: setAlerts, // Pass the state setter to the service
-        });
-        // Per requirements, the service runs for the app's lifetime and is not cleaned up here.
-    }, []);
+        // Define handlers for events emitted by the backendService
+        const handleInitialAlerts = (payload: Alert[]) => {
+            console.log(`[GlobalProvider] Handling initial_alerts with ${payload.length} alerts.`);
+            setAlerts(Array.isArray(payload) ? payload : []);
+        };
+        
+        const handleAlertCreated = (payload: Alert) => {
+             console.log(`[GlobalProvider] Handling alert_created for alert #${payload.id}.`);
+             setAlerts(prev => [payload, ...(prev || []).filter(a => a.id !== payload.id)]);
+        };
+        
+        const handleAlertUpdated = (payload: Alert) => {
+            console.log(`[GlobalProvider] Handling alert_updated for alert #${payload.id}.`);
+            setAlerts(prev => (prev || []).map(a => a.id === payload.id ? payload : a));
+        };
+        
+        const handleAlertDeleted = (payload: { id: number }) => {
+            console.log(`[GlobalProvider] Handling alert_deleted for alert #${payload.id}.`);
+            setAlerts(prev => (prev || []).filter(a => a.id !== payload.id));
+        };
+        
+        const handleNotification = (payload: { title: string; body: string; }) => {
+             console.log(`[GlobalProvider] Handling notification: ${payload.title}`);
+             RNAlert.alert(payload.title, payload.body);
+        }
+
+        // Subscribe the handlers to the backend service events
+        backendService.addListener('initial_alerts', handleInitialAlerts);
+        backendService.addListener('alert_created', handleAlertCreated);
+        backendService.addListener('alert_updated', handleAlertUpdated);
+        backendService.addListener('alert_deleted', handleAlertDeleted);
+        backendService.addListener('notification', handleNotification);
+
+        // Cleanup function to unsubscribe listeners when the component unmounts
+        return () => {
+            backendService.removeListener('initial_alerts', handleInitialAlerts);
+            backendService.removeListener('alert_created', handleAlertCreated);
+            backendService.removeListener('alert_updated', handleAlertUpdated);
+            backendService.removeListener('alert_deleted', handleAlertDeleted);
+            backendService.removeListener('notification', handleNotification);
+        };
+    }, []); // Empty dependency array ensures this runs only once.
 
     // Effect to manage geohash subscriptions for citizens based on location changes.
     useEffect(() => {
         if (location && currentUser?.role === 'citizen') {
-            // Calculate the geohash for the current location (precision 7 is ~150m grid)
-            const currentGeohash = ngeohash.encode(location.latitude, location.longitude, 7);
+            // Calculate the geohash for the current location (precision 4 is ~39km x 19.5km grid)
+            const currentGeohash = ngeohash.encode(location.latitude, location.longitude, 4);
             // Only update subscriptions if the user has moved to a new geohash grid
             if (currentGeohash !== lastGeohashRef.current) {
                 console.log(`Citizen moved to new geohash grid: ${currentGeohash}. Updating subscriptions.`);
@@ -67,11 +100,6 @@ export const GlobalProvider = ({ children }: { children: ReactNode }) => {
             }
         }
     }, [location, currentUser]);
-
-    const showNotification = (title: string, body: string) => {
-        console.log(`NOTIFICATION: ${title} - ${body}`);
-        //RNAlert.alert(title, body);
-    };
 
     const startCitizenLocationTracking = async () => {
         if (locationSubscription.current) {
