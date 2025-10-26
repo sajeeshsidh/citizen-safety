@@ -62,11 +62,11 @@ function AppLayout() {
             notificationListener.current?.remove();
             responseListener.current?.remove();
         };
-    }, [currentUser]);
+    }, [currentUser, router]);
 
 
     useEffect(() => {
-        const isAuthRoute = pathname === '/citizen' || pathname === '/police' || pathname === '/firefighter';
+        const isAuthRoute = ['/citizen', '/police', '/firefighter', '/profile'].includes(pathname);
         if (!currentUser && isAuthRoute) {
             router.replace('/');
         } else if (currentUser && pathname === '/') {
@@ -100,8 +100,12 @@ function AppLayout() {
             }
 
             // If we are on a true "home screen" (no params), then handle logout confirmation.
-            const isHomeScreen = (pathname === '/citizen' || pathname === '/police' || pathname === '/firefighter') && !params.view;
+            const isHomeScreen = ['/citizen', '/police', '/firefighter', '/profile'].some(p => pathname.startsWith(p)) && !params.view;
             if (isHomeScreen) {
+                if (router.canGoBack()) {
+                    router.back();
+                    return true;
+                }
                 // If back is pressed twice within 2 seconds on a home screen, logout.
                 if (backHandlerCount.current === 0) {
                     backHandlerCount.current = 1;
@@ -148,6 +152,10 @@ function AppLayout() {
             />
             <Stack.Screen
                 name="firefighter"
+                options={{ header: () => <Header currentUser={currentUser} onLogout={logout} /> }}
+            />
+            <Stack.Screen
+                name="profile"
                 options={{ header: () => <Header currentUser={currentUser} onLogout={logout} /> }}
             />
         </Stack>

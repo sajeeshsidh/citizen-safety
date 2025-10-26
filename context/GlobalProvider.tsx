@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, createContext, useContext, ReactNode } from 'react';
 import { Alert as RNAlert } from 'react-native';
 import * as Location from 'expo-location';
-import { User, Alert } from '../types';
+import { User, Alert, Location as AppLocation } from '../types';
 import { backendService } from '../services/BackendService';
 import * as ngeohash from 'ngeohash';
 
@@ -14,6 +14,7 @@ interface GlobalContextType {
     login: (user: User) => void;
     logout: () => void;
     setAlerts: React.Dispatch<React.SetStateAction<Alert[]>>;
+    updateCurrentUser: (details: Partial<User>) => void;
 }
 
 // Create the context with a default value
@@ -49,25 +50,25 @@ export const GlobalProvider = ({ children }: { children: ReactNode }) => {
             console.log(`[GlobalProvider] Handling initial_alerts with ${payload.length} alerts.`);
             setAlerts(Array.isArray(payload) ? payload : []);
         };
-        
+
         const handleAlertCreated = (payload: Alert) => {
-             console.log(`[GlobalProvider] Handling alert_created for alert #${payload.id}.`);
-             setAlerts(prev => [payload, ...(prev || []).filter(a => a.id !== payload.id)]);
+            console.log(`[GlobalProvider] Handling alert_created for alert #${payload.id}.`);
+            setAlerts(prev => [payload, ...(prev || []).filter(a => a.id !== payload.id)]);
         };
-        
+
         const handleAlertUpdated = (payload: Alert) => {
             console.log(`[GlobalProvider] Handling alert_updated for alert #${payload.id}.`);
             setAlerts(prev => (prev || []).map(a => a.id === payload.id ? payload : a));
         };
-        
+
         const handleAlertDeleted = (payload: { id: number }) => {
             console.log(`[GlobalProvider] Handling alert_deleted for alert #${payload.id}.`);
             setAlerts(prev => (prev || []).filter(a => a.id !== payload.id));
         };
-        
+
         const handleNotification = (payload: { title: string; body: string; }) => {
-             console.log(`[GlobalProvider] Handling notification: ${payload.title}`);
-             RNAlert.alert(payload.title, payload.body);
+            console.log(`[GlobalProvider] Handling notification: ${payload.title}`);
+            RNAlert.alert(payload.title, payload.body);
         }
 
         // Subscribe the handlers to the backend service events
@@ -96,7 +97,8 @@ export const GlobalProvider = ({ children }: { children: ReactNode }) => {
             if (currentGeohash !== lastGeohashRef.current) {
                 console.log(`Citizen moved to new geohash grid: ${currentGeohash}. Updating subscriptions.`);
                 lastGeohashRef.current = currentGeohash;
-                backendService.updateSubscriptions({ lat: location.latitude, lng: location.longitude });
+                const appLocation: AppLocation = { lat: location.latitude, lng: location.longitude };
+                backendService.updateSubscriptions(appLocation);
             }
         }
     }, [location, currentUser]);
@@ -135,7 +137,7 @@ export const GlobalProvider = ({ children }: { children: ReactNode }) => {
             setLocation(MOCK_LOCATION);
         }
     };
-    
+
     const stopCitizenLocationTracking = () => {
         if (locationSubscription.current) {
             locationSubscription.current.remove();
@@ -169,6 +171,10 @@ export const GlobalProvider = ({ children }: { children: ReactNode }) => {
         setAlerts([]);
     };
 
+    const updateCurrentUser = (details: Partial<User>) => {
+        setCurrentUser(prev => prev ? { ...prev, ...details } : null);
+    };
+
     const value = {
         currentUser,
         alerts,
@@ -177,6 +183,7 @@ export const GlobalProvider = ({ children }: { children: ReactNode }) => {
         login,
         logout,
         setAlerts,
+        updateCurrentUser,
     };
 
     return <GlobalContext.Provider value={value}>{children}</GlobalContext.Provider>;

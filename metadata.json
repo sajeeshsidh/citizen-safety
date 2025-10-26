@@ -1,8 +1,9 @@
 {
-  "name": "Citizen Police Alert",
-  "description": "A mobile application where citizens can alert police of emergencies, and nearby officers can view and respond to these alerts in real-time.",
+  "name": "Citizen Safety",
+  "description": "A mobile application where citizens can alert police/firefighter of emergencies, and nearby officers can view and respond to these alerts in real-time.",
   "requestFramePermissions": [
     "microphone",
+    "camera",
     "geolocation"
   ]
 }
