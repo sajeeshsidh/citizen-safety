@@ -9,8 +9,8 @@ import { Alert, Location, PoliceOfficer } from '../types';
 // Use __DEV__ global variable (provided by React Native) to determine the environment.
 const IS_DEV = __DEV__;
 
-const PROD_API_BASE_URL = 'https://citizen-safety-server.onrender.com/api';
-const DEV_API_BASE_URL = 'http://192.168.1.6:3001/api';
+const PROD_API_BASE_URL = 'https://citizen-safety-api-gateway.onrender.com/api';
+const DEV_API_BASE_URL = 'https://citizen-safety-api-gateway.onrender.com/api';
 
 const API_BASE_URL = IS_DEV ? DEV_API_BASE_URL : PROD_API_BASE_URL;
 
@@ -27,6 +27,10 @@ interface StoredPoliceUser {
     phoneNumber: string;
 }
 
+interface StoredFirefighter {
+    unitNumber: string;
+}
+
 type NewAlertData = Partial<Omit<Alert, 'id' | 'timestamp' | 'status' | 'acceptedBy'>> & {
     citizenId: string;
 };
@@ -35,15 +39,31 @@ type NewAlertData = Partial<Omit<Alert, 'id' | 'timestamp' | 'status' | 'accepte
 // --- API Helper Function ---
 
 const handleResponse = async (response: Response) => {
+    // Read the raw text of the response first. This prevents JSON parsing errors on empty or non-JSON bodies.
+    const responseText = await response.text();
+
     if (response.status === 204) { // No Content
         return;
     }
-    const data = await response.json();
+
     if (!response.ok) {
-        // Use the message from the backend error response
-        throw new Error(data.message || `HTTP error! status: ${response.status}`);
+        // If the server returned an error, try to parse the body for a structured message.
+        // If that fails, throw the raw text.
+        try {
+            const errorData = JSON.parse(responseText);
+            throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+        } catch (e) {
+            throw new Error(responseText || `HTTP error! status: ${response.status}`);
+        }
     }
-    return data;
+
+    // If the response was successful (2xx), it should be JSON.
+    try {
+        return JSON.parse(responseText);
+    } catch (e) {
+        console.error("Failed to parse successful response as JSON:", responseText);
+        throw new Error("Received an invalid response from the server.");
+    }
 };
 
 // --- Citizen API ---
@@ -97,6 +117,44 @@ export const loginPolice = async (badgeNumber: string): Promise<StoredPoliceUser
     });
     return handleResponse(response);
 };
+
+// --- Firefighter API ---
+
+/**
+ * Logs in or registers a firefighter by their unit number.
+ */
+export const loginOrRegisterFirefighter = async (unitNumber: string): Promise<StoredFirefighter> => {
+    const response = await fetch(`${API_BASE_URL}/firefighter/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ unitNumber }),
+    });
+    return handleResponse(response);
+};
+
+/**
+ * Updates the push notification token for a firefighter.
+ */
+export const updateFirefighterPushToken = async (unitNumber: string, token: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/firefighter/pushtoken`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ unitNumber, token }),
+    });
+    await handleResponse(response);
+};
+
+/**
+ * Updates the location for a given firefighter.
+ */
+export const updateFirefighterLocation = async (unitNumber: string, location: Location): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/firefighter/location`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ unitNumber, location }),
+    });
+    await handleResponse(response);
+}
 
 /**
  * Updates the push notification token for a police officer.

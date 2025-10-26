@@ -1,19 +1,23 @@
 import { User, Alert } from '../types';
 import * as backendApi from './backend';
+import * as ngeohash from 'ngeohash';
 
 // Use __DEV__ global variable (provided by React Native) to determine the environment.
 const IS_DEV = __DEV__;
 
-const PROD_WS_URL = 'wss://citizen-safety-server.onrender.com';
-const DEV_WS_URL = 'http://192.168.1.6:3001/api';
+const PROD_WS_URL = 'wss://websocket-service-0ba7.onrender.com';
+const DEV_WS_URL = 'wss://websocket-service-0ba7.onrender.com';
 
 const WS_URL = IS_DEV ? DEV_WS_URL : PROD_WS_URL;
 
-interface ServiceCallbacks {
-    onAlertsUpdate: (alerts: Alert[]) => void;
-    onNotification: (title: string, body: string) => void;
-    getPreviousAlerts: () => Alert[];
+export type AlertEventType = 'initial_alerts' | 'alert_created' | 'alert_updated' | 'alert_deleted' | 'notification';
+
+export interface AlertMessage {
+    type: AlertEventType;
+    payload: any;
 }
+
+type EventListener = (payload: any) => void;
 
 class BackendService {
     private ws: WebSocket | null = null;
@@ -21,12 +25,17 @@ class BackendService {
     private callbacks: ServiceCallbacks | null = null;
     private isConnecting = false;
     private reconnectTimeoutId: number | undefined;
+    private currentSubscriptions = new Set<string>();
+    private listeners: { [key in AlertEventType]?: EventListener[] } = {};
 
     // --- API Methods (pass-through to the api client) ---
     registerCitizen = backendApi.registerCitizen;
     loginCitizen = backendApi.loginCitizen;
     registerPolice = backendApi.registerPolice;
     loginPolice = backendApi.loginPolice;
+    loginOrRegisterFirefighter = backendApi.loginOrRegisterFirefighter;
+    updateFirefighterPushToken = backendApi.updateFirefighterPushToken;
+    updateFirefighterLocation = backendApi.updateFirefighterLocation;
     updatePolicePushToken = backendApi.updatePolicePushToken;
     updatePoliceLocation = backendApi.updatePoliceLocation;
     fetchPoliceLocations = backendApi.fetchPoliceLocations;
@@ -39,13 +48,40 @@ class BackendService {
     deleteAlert = backendApi.deleteAlert;
     clearAlerts = backendApi.clearAlerts;
 
+    // --- Event Emitter Implementation ---
+
+    addListener(event: AlertEventType, listener: EventListener) {
+        if (!this.listeners[event]) {
+            this.listeners[event] = [];
+        }
+        this.listeners[event]?.push(listener);
+    }
+
+    removeListener(event: AlertEventType, listenerToRemove: EventListener) {
+        if (!this.listeners[event]) return;
+        this.listeners[event] = this.listeners[event]?.filter(
+            (listener) => listener !== listenerToRemove
+        );
+    }
+    
+    private emit(event: AlertEventType, payload: any) {
+        this.listeners[event]?.forEach((listener) => {
+            try {
+                listener(payload);
+            } catch (error) {
+                console.error(`Error in listener for event ${event}:`, error);
+            }
+        });
+    }
+
+    // --- Core Service Logic ---
+
     /**
      * Initializes the service and its callbacks. Called once on app startup.
      * It immediately attempts to establish a WebSocket connection.
      */
-    init(callbacks: ServiceCallbacks) {
+    init() {
         console.log("BackendService initializing...");
-        this.callbacks = callbacks;
         this.startWebSocketConnection();
     }
 
@@ -70,6 +106,36 @@ class BackendService {
     deauthenticate() {
         console.log("BackendService deauthenticating.");
         this.currentUser = null;
+        this.updateSubscriptions(null);
+    }
+
+    updateSubscriptions(location: Location | null) {
+        if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+            return; // Cannot update subscriptions if not connected.
+        }
+
+        let newTopics = new Set<string>();
+        if (location) {
+            // Precision 4 is a grid of approx. 39km x 19.5km
+            const center = ngeohash.encode(location.lat, location.lng, 4);
+            const neighbors = ngeohash.neighbors(center);
+            newTopics.add(`geo:${center}`);
+            neighbors.forEach(n => newTopics.add(`geo:${n}`));
+        }
+        
+        const toUnsubscribe = [...this.currentSubscriptions].filter(x => !newTopics.has(x));
+        const toSubscribe = [...newTopics].filter(x => !this.currentSubscriptions.has(x));
+
+        if (toUnsubscribe.length > 0) {
+            this.ws.send(JSON.stringify({ type: 'unsubscribe', payload: { topics: toUnsubscribe } }));
+            console.log(`[WS] Unsubscribing from topics:`, toUnsubscribe);
+        }
+        if (toSubscribe.length > 0) {
+            this.ws.send(JSON.stringify({ type: 'subscribe', payload: { topics: toSubscribe } }));
+            console.log(`[WS] Subscribing to topics:`, toSubscribe);
+        }
+
+        this.currentSubscriptions = newTopics;
     }
 
     /**
@@ -83,9 +149,7 @@ class BackendService {
     }
 
     private startWebSocketConnection() {
-        if (this.ws || this.isConnecting) {
-            return;
-        }
+        if (this.ws || this.isConnecting) return;
 
         this.isConnecting = true;
         console.log('Attempting to open WebSocket connection...');
@@ -94,10 +158,10 @@ class BackendService {
         this.ws.onopen = () => {
             console.log('WebSocket connection opened.');
             this.isConnecting = false;
-            if (this.reconnectTimeoutId) {
-                clearTimeout(this.reconnectTimeoutId);
-                this.reconnectTimeoutId = undefined;
-            }
+
+            clearTimeout(this.reconnectTimeoutId);
+            this.reconnectTimeoutId = undefined;
+
             // If a user logged in while the socket was down, authenticate now.
             this.sendAuthentication();
         };
@@ -105,8 +169,13 @@ class BackendService {
         this.ws.onmessage = (event) => {
             try {
                 const message = JSON.parse(event.data);
-                if (message.type === 'alerts') {
-                    this.handleAlertsUpdate(message.payload);
+                const { type, payload } = message;
+
+                if (type && this.listeners[type as AlertEventType]) {
+                    this.emit(type, payload);
+                    this.handleNotificationForAlerts(type, payload);
+                } else {
+                    console.warn(`[WS] Received unknown or unhandled message type: ${type}`);
                 }
             } catch (error) {
                 console.error('Error parsing WebSocket message:', error);
@@ -129,6 +198,25 @@ class BackendService {
             console.error("WebSocket error:", (error as any).message);
             this.isConnecting = false;
         };
+    }
+
+    // Handles emitting local "notification" events based on incoming data.
+    private handleNotificationForAlerts(type: AlertEventType, payload: any) {
+        if (!this.currentUser) return;
+
+        if (type === 'alert_created') {
+            const newAlert = payload as Alert;
+            // Notify police/firefighters about a new alert they are targeted for.
+            if (this.currentUser.role !== 'citizen' && newAlert.status === 'new' && newAlert.targetedOfficers?.includes(this.currentUser.mobile)) {
+                this.emit('notification', { title: 'New Incoming Alert!', body: newAlert.message || 'A new voice alert has been received.' });
+            }
+        } else if (type === 'alert_updated') {
+            const updatedAlert = payload as Alert;
+            // Notify a citizen that their alert was accepted.
+            if (this.currentUser.role === 'citizen' && updatedAlert.citizenId === this.currentUser.mobile && updatedAlert.status === 'accepted') {
+                this.emit('notification', { title: 'An Officer is Responding!', body: `Help is on the way. Officer #${updatedAlert.acceptedBy} is en route.` });
+            }
+        }
     }
 
     private handleAlertsUpdate(newAlerts: Alert[]) {

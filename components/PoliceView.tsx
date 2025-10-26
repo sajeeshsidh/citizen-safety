@@ -114,6 +114,11 @@ const PoliceView: React.FC<PoliceViewProps> = ({ currentUser, alerts, setAlerts,
                 return;
             }
 
+            // Get initial location for immediate subscription
+            const initialPosition = await Location.getCurrentPositionAsync({});
+            const initialLocation = { lat: initialPosition.coords.latitude, lng: initialPosition.coords.longitude };
+            backendService.updateSubscriptions(initialLocation);
+
             locationSubscription.current = await Location.watchPositionAsync(
                 {
                     accuracy: Location.Accuracy.High,
@@ -121,7 +126,10 @@ const PoliceView: React.FC<PoliceViewProps> = ({ currentUser, alerts, setAlerts,
                 },
                 (position) => {
                     const newLocation = { lat: position.coords.latitude, lng: position.coords.longitude };
+                    // Update location for dispatch
                     backendService.updatePoliceLocation(myBadgeNumber, newLocation).catch(err => console.error("Failed to update location:", err));
+                    // Update location for real-time alert subscriptions
+                    backendService.updateSubscriptions(newLocation);
                 }
             );
         };
@@ -130,6 +138,7 @@ const PoliceView: React.FC<PoliceViewProps> = ({ currentUser, alerts, setAlerts,
 
         return () => {
             locationSubscription.current?.remove();
+            backendService.updateSubscriptions(null); // Unsubscribe on logout/unmount
         };
     }, [myBadgeNumber]);
 
@@ -137,10 +146,12 @@ const PoliceView: React.FC<PoliceViewProps> = ({ currentUser, alerts, setAlerts,
         setIsProcessing(true);
         try {
             const updatedAlert = await backendService.acceptAlert(alertId, myBadgeNumber);
-            setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, ...updatedAlert } : a));
-            setSelectedAlert(prev => prev && prev.id === alertId ? { ...prev, ...updatedAlert } : prev);
+            // State is now updated via WebSocket events, so direct manipulation is not required.
+            // setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, ...updatedAlert } : a));
+            // setSelectedAlert(prev => prev && prev.id === alertId ? { ...prev, ...updatedAlert } : prev);
         } catch (error) {
             console.error("Failed to accept alert:", error);
+            RNAlert.alert("Error", "Failed to accept the alert. Please try again.");
         } finally {
             setIsProcessing(false);
         }
@@ -149,10 +160,11 @@ const PoliceView: React.FC<PoliceViewProps> = ({ currentUser, alerts, setAlerts,
     const handleResolveAlert = async (alertId: number) => {
         setIsProcessing(true);
         try {
-            const updatedAlert = await backendService.resolveAlert(alertId);
-            setAlerts(prev => prev.map(a => a.id === alertId ? { ...a, ...updatedAlert } : a));
+            await backendService.resolveAlert(alertId);
+             // State is now updated via WebSocket events.
         } catch (error) {
             console.error("Failed to resolve alert:", error);
+            RNAlert.alert("Error", "Failed to resolve the alert. Please try again.");
         } finally {
             setIsProcessing(false);
         }
@@ -161,9 +173,10 @@ const PoliceView: React.FC<PoliceViewProps> = ({ currentUser, alerts, setAlerts,
     const handleDeleteFromHistory = async (alertId: number) => {
         try {
             await backendService.deleteAlert(alertId);
-            setAlerts(prev => prev.filter(a => a.id !== alertId));
+            // State is now updated via WebSocket events.
         } catch (error) {
             console.error("Failed to delete alert:", error);
+            RNAlert.alert("Error", "Failed to delete the alert. Please try again.");
         }
     };
 

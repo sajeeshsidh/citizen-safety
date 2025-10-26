@@ -11,6 +11,7 @@ export interface Alert {
   location?: Location;
   message?: string;
   audioBase64?: string;
+  category?: 'Law & Order' | 'Fire & Rescue' | 'Medical Emergency' | 'Traffic Incident';
   status: 'new' | 'accepted' | 'resolved' | 'canceled' | 'timed_out';
   acceptedBy?: string;
   searchRadius?: number;
@@ -18,7 +19,7 @@ export interface Alert {
   targetedOfficers?: string[];
 }
 
-export type UserRole = 'citizen' | 'police';
+export type UserRole = 'citizen' | 'police' | 'firefighter';
 
 // FIX: Added Location interface to resolve missing type error in MapView.tsx.
 export interface Location {
@@ -29,6 +30,13 @@ export interface Location {
 export interface PoliceOfficer {
     badgeNumber: string;
     location: Location;
+    department?: string;
+}
+
+export interface Firefighter {
+    unitNumber: string;
+    location: Location;
+    department?: string;
 }
 
 export interface NavigationStep {

@@ -12,12 +12,13 @@ const LoginPage = () => {
     // Validate the view param from the URL and provide a default of 'role'
     const currentView: LoginViewStep =
         view === 'citizenLoginMethod' ||
-            view === 'mobileInput' ||
-            view === 'otpInput' ||
-            view === 'passwordLogin' ||
-            view === 'policeLogin'
-            ? view
-            : 'role';
+        view === 'mobileInput' ||
+        view === 'otpInput' ||
+        view === 'passwordLogin' ||
+        view === 'policeLogin' ||
+        view === 'firefighterLogin'
+        ? view
+        : 'role';
 
     return (
         <SafeAreaView style={styles.container}>
